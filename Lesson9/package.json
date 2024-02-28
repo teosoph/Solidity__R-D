@@ -1,0 +1,21 @@
+{
+  "name": "lesson8",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "hardhat:compile": "hardhat compile",
+    "hardhat:compile&test": "hardhat compile && hardhat test",
+    "slither": "slither ./contracts",
+    "lint:contracts": "npx solhint contracts/**/*.sol",
+    "lint:contracts:format": "npx prettier --write contracts/**/*.sol"
+  },
+  "keywords": [],
+  "author": "Andriian Chestnykh",
+  "license": "ISC",
+  "devDependencies": {
+    "solhint": "^3.6.2",
+    "solhint-plugin-prettier": "^0.0.5"
+  }
+}

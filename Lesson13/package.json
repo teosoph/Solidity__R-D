@@ -1,0 +1,25 @@
+{
+  "name": "lesson13",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "hardhat:compile": "hardhat compile",
+    "compile:simple_circuit": "cd zero_knowledge && ./compile-circuit.sh ./simple_circuit/simple_circuit.circom powersOfTau28_hez_final_14.ptau",
+    "prove:simple_circuit": "cd zero_knowledge && ./generate-witness-and-proof.sh simple_circuit.circom ./simple_circuit/input.json",
+    "hardhat:test:simple_circuit": "CIRCUIT_NAME=simple_circuit hardhat test",
+    "compile:prove_hash_preimage": "cd zero_knowledge && ./compile-circuit.sh ./prove_hash_preimage/prove_hash_preimage.circom powersOfTau28_hez_final_14.ptau",
+    "prove:prove_hash_preimage": "cd zero_knowledge && ./generate-witness-and-proof.sh prove_hash_preimage.circom ./prove_hash_preimage/input.json",
+    "hardhat:test:prove_hash_preimage": "CIRCUIT_NAME=prove_hash_preimage hardhat test"
+  },
+  "keywords": [],
+  "author": "Andriian Chestnykh",
+  "license": "ISC",
+  "devDependencies": {
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.1"
+  }
+}

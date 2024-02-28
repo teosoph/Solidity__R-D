@@ -1,0 +1,26 @@
+{
+  "name": "lesson4",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "hardhat:compile": "hardhat compile",
+    "hardhat:node": "hardhat node",
+    "hardhat:test:inheritance": "hardhat test test/Inheritance.test.js",
+    "hardhat:test:abstract": "hardhat test test/Abstract.test.js",
+    "hardhat:test:interface": "hardhat test test/Interface.test.js",
+    "hardhat:test:visibility": "hardhat test test/Visibility.test.js",
+    "hardhat:test:modifier": "hardhat test test/FunctionModifier.test.js",
+    "hardhat:test:events": "hardhat test test/Events.test.js",
+    "hardhat:test:error": "hardhat test test/Error.test.js",
+    "hardhat:test:special_functions": "hardhat test test/SpecialFunctions.test.js",
+    "hardhat:clean": "hardhat clean"
+  },
+  "keywords": [],
+  "author": "Andriian Chestnykh",
+  "license": "ISC"
+}

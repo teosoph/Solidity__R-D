@@ -1,0 +1,19 @@
+{
+  "name": "lesson10",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "hardhat:node": "hardhat node",
+    "hardhat:compile": "hardhat compile",
+    "hardhat:test": "hardhat test",
+    "hardhat:deploy": "hardhat run --network localhost scripts/deploy.js"
+  },
+  "keywords": [],
+  "author": "Andriian Chestnykh",
+  "license": "ISC",
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.9.3"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "testhardhat",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "hardhat:node": "hardhat node",
+    "hardhat:compile": "hardhat compile",
+    "hardhat:compile:force": "hardhat compile --force",
+    "hardhat:test": "hardhat test",
+    "hardhat:test:gas": "REPORT_GAS=true COINMARKETCAP_API_KEY=$(security find-generic-password -w -s 'Coinmarketcap API Key') hardhat test",
+    "hardhat:deploy:lock": "hardhat run scripts/deployLock.js --network localhost",
+    "hardhat:deploy:counter": "hardhat run scripts/deployCounter.js --network localhost",
+    "hardhat:deploy:sepolia": "MNEMONIC=$(security find-generic-password -w -s 'Seed Phrase (for Testnets)') INFURA_API_KEY=$(security find-generic-password -w -s 'Infura API key (Solidity Courses)') hardhat run scripts/deployLock.js --network sepolia",
+    "hardhat:verify:sepolia": "ETHERSCAN_API_KEY=$(security find-generic-password -w -s 'Etherscan API Key') INFURA_API_KEY=$(security find-generic-password -w -s 'Infura API key (Solidity Courses)') hardhat verify --network sepolia 0x4ca86c08a287f1e268e50b927176badb178de1ed 0x0000000000000000000000000000000000000000000000000000000064d2530c"
+  },
+  "keywords": [],
+  "author": "Andriian Chestnykh",
+  "license": "ISC"
+}

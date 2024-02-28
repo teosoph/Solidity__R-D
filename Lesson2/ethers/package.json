@@ -1,0 +1,10 @@
+{
+  "name": "lesson2",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "contracts.js",
+  "keywords": [],
+  "author": "Andriian Chestnykh",
+  "license": "ISC"
+}
