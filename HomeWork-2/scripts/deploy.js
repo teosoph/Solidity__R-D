@@ -12,7 +12,7 @@ async function main() {
 
     console.log("SimpleMessage deployed to:", simpleMessage.address);
 }
-
+//
 main()
     .then(() => process.exit(0))
     .catch((error) => {
