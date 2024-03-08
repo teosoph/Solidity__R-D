@@ -8,9 +8,12 @@ async function main() {
     const SimpleMessage = await hre.ethers.getContractFactory("SimpleMessage");
     const simpleMessage = await SimpleMessage.deploy("Ihor Kyrychenko, 07.03.2024");
 
-    await simpleMessage.deployed();
+    await simpleMessage.waitForDeployment();
+    const contractAddr = await simpleMessage.getAddress();
+    console.log("SimpleMessage deployed to:", contractAddr);
 
-    console.log("SimpleMessage deployed to:", simpleMessage.address);
+    const res = await simpleMessage.message();
+    console.log(res);
 }
 //
 main()
@@ -19,3 +22,5 @@ main()
         console.error(error);
         process.exit(1);
     });
+
+// npx hardhat run scripts/deploy.js --network localhost
