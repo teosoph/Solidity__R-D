@@ -128,3 +128,13 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+download/ETH__MainAdress__output.txt
+HomeWork-2/download/ETH__MainAdress__output.txt
+ENVIRONMENTS/api_key.json
+ENVIRONMENTS/etherscan_api.json
+ENVIRONMENTS/mnemonics.json
+
+
+artifacts/
+cache/
+HomeWork-2/scripts/deploy copy.js
