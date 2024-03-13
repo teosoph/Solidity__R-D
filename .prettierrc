@@ -1,0 +1,12 @@
+{
+    "trailingComma": "all",
+    "tabWidth": 4,
+    "printWidth": 120,
+    "semi": true,
+    "singleQuote": false,
+
+
+ 
+    "wrap-ternary": false,
+    "preserveEmptyLines": true
+}
