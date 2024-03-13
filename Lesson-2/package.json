@@ -1,0 +1,11 @@
+{
+  "name": "lesson2",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "",
+  "main": "address.js",
+  "scripts": {
+  },
+  "author": "Ihor Kyrychenko",
+  "license": "MIT"
+}
