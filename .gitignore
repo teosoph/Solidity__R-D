@@ -128,3 +128,10 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+ENVIRONMENTS/api_key.json
+ENVIRONMENTS/etherscan_api.json
+ENVIRONMENTS/mnemonics.json
+artifacts/
+cache/
+
+
