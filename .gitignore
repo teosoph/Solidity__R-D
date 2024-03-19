@@ -146,3 +146,4 @@ ENVIRONMENTS/mnemonics.json
 artifacts/
 cache/
 HomeWork-2/scripts/deploy copy.js
+DomainRegistry/.states/vm-shanghai/state.json
