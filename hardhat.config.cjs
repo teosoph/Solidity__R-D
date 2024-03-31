@@ -12,9 +12,9 @@ if (process.env.CI) {
         infura: {
             ethereum: { sepolia: LOCAL_API_KEY },
         },
-    } = require("../ENVIRONMENTS/api_key.json");
-    const { etherscan: LOCAL_ETHERSCAN_API_KEY } = require("../ENVIRONMENTS/etherscan_api.json");
-    const { myMnemonic24: LOCAL_MNEMONIC } = require("../ENVIRONMENTS/mnemonics.json");
+    } = require("./ENVIRONMENTS/api_key.json");
+    const { etherscan: LOCAL_ETHERSCAN_API_KEY } = require("./ENVIRONMENTS/etherscan_api.json");
+    const { myMnemonic24: LOCAL_MNEMONIC } = require("./ENVIRONMENTS/mnemonics.json");
 
     MNEMONIC = LOCAL_MNEMONIC;
     API_KEY = LOCAL_API_KEY;

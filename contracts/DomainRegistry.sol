@@ -46,7 +46,12 @@ pragma solidity ^0.8.19;
  */
 
 contract DomainRegistry {
-    // Structs
+    // ____________________ Constants ____________________
+    uint256 public constant MAX_REGISTRATION_FEE = 1 ether; // Maximum value example
+    uint8 constant MIN_DOMAIN_LENGTH = 1; // Minimum length of a domain name.
+    uint8 constant MAX_DOMAIN_LENGTH = 63; // Maximum length of a domain name.
+
+    // ____________________ Structs ____________________
     /**
      * @dev Represents a domain with its owner and the registration date.
      */
@@ -55,9 +60,9 @@ contract DomainRegistry {
         uint256 registrationDate; // Timestamp of the domain registration.
     }
 
-    // State variables
+    // ____________________ State variables ____________________
     /// @notice Owner of the contract
-    address public owner;
+    address public contractOwner;
 
     /// @notice Registration fee required to register a domain
     uint256 public registrationFee = 0.01 ether;
@@ -68,7 +73,7 @@ contract DomainRegistry {
     /// @dev Array to store the names of all registered domains
     string[] private registeredDomainNames;
 
-    // Data mappings
+    // ____________________ Data mappings ____________________
     /**
      * @dev Stores domain details, accessible by domain name.
      */
@@ -79,11 +84,7 @@ contract DomainRegistry {
      */
     mapping(address => string[]) private domainsByOwner;
 
-    // Constants
-    uint8 constant MIN_DOMAIN_LENGTH = 1; // Minimum length of a domain name.
-    uint8 constant MAX_DOMAIN_LENGTH = 63; // Maximum length of a domain name.
-
-    // Events
+    // ____________________ Events ____________________
     /**
      * @dev Emitted when a domain is successfully registered.
      * @param domainName Name of the registered domain.
@@ -93,31 +94,39 @@ contract DomainRegistry {
     event DomainRegistered(string domainName, address indexed owner, uint256 timestamp);
 
     /**
+     * @dev Emitted when ownership of the contract is transferred.
+     * @param previousOwner Address of the previous owner.
+     * @param newOwner Address of the new owner.
+     * This event is triggered in the `transferOwnership` function, indicating a successful transfer of control from the `previousOwner` to the `newOwner`. This functionality enhances the contract's flexibility and security by allowing the current owner to delegate control of the contract to another address, ensuring continuity in contract management and operations. It's an essential feature for scenarios where transferring control is necessary for operational or security reasons.
+     */
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
      * @dev Emitted when the registration fee is updated.
      * @param newFee The new registration fee.
      */
     event FeeUpdated(uint256 newFee);
 
-    // Modifiers
+    // ____________________ Modifiers ____________________
     /**
      * @dev Ensures the caller is the owner of the contract.
      */
     modifier onlyOwner() {
-        require(msg.sender == owner, "Caller is not the owner");
+        require(msg.sender == contractOwner, "Caller is not the owner");
         _;
     }
 
-    // Constructor
+    // ____________________ Constructor ____________________
     /**
      * @dev Sets the deployer as the initial owner of the contract.
      */
     constructor() {
-        owner = msg.sender;
+        contractOwner = msg.sender;
     }
 
-    // Functions
+    // ____________________ Functions ____________________
 
-    // Core Business Logic Functions
+    // ____________________ Core Business Logic Functions ____________________
     /**
      * @notice Registers a new domain.
      * @dev Registers a domain if it is valid and not already registered. Charges a fee and transfers it to the owner.
@@ -128,32 +137,51 @@ contract DomainRegistry {
         require(isValidTopLevelDomain(domainName), "Invalid domain format");
         require(domains[domainName].owner == address(0), "Domain is already registered");
 
-        // Transfer the registration fee to the owner immediately upon receiving it.
-        (bool success, ) = owner.call{value: msg.value}("");
-        require(success, "Transfer failed");
-
+        // Update the contract state
         domains[domainName] = Domain(msg.sender, block.timestamp);
         domainsByOwner[msg.sender].push(domainName);
         totalDomainsRegistered++;
-
-        emit DomainRegistered(domainName, msg.sender, block.timestamp);
         registeredDomainNames.push(domainName);
+
+        // Transfer the registration fee to the owner immediately upon receiving it.
+        (bool success, ) = contractOwner.call{value: msg.value}("");
+        require(success, "Transfer failed");
+
+        // Generate an event after all changes and successful transfer of funds
+        emit DomainRegistered(domainName, msg.sender, block.timestamp);
     }
 
-    // Contract Management Functions
-
+    // ____________________ Contract Management Functions ____________________
     /**
-     * @notice Updates the registration fee for domains.
-     * @dev Can only be called by the contract owner. The fee is specified in Wei.
-     * @param newFee The new registration fee in wei.
+     * @dev Updates the domain registration fee to a new value. This function can only be invoked by the owner of the contract.
+     * It allows the owner to adjust the fee required for new domain registrations. The fee must be a non-negative value and
+     * should not exceed the maximum allowed limit defined by `MAX_REGISTRATION_FEE`, ensuring that the fee remains within
+     * reasonable bounds. The updated fee is specified in Wei. Emits a `FeeUpdated` event upon successful update.
+     * Requirements:
+     * - The caller must be the contract owner.
+     * - `newFee` must be greater than or equal to 0.
+     * - `newFee` must not exceed `MAX_REGISTRATION_FEE`.
+     * @param newFee The new registration fee in Wei. Must be non-negative and not exceed the maximum allowed fee.
      */
     function updateRegistrationFee(uint256 newFee) external onlyOwner {
+        require(newFee > 0, "Fee cannot be negative or zero");
+        require(newFee <= MAX_REGISTRATION_FEE, "Fee exceeds maximum allowed value");
+
         registrationFee = newFee;
         emit FeeUpdated(newFee);
     }
 
-    // View Functions
+    /**
+     * @dev Allows the current owner to transfer control of the contract to a newOwner.
+     * @param newOwner The address to transfer ownership to.
+     */
+    function transferOwnership(address newOwner) public onlyOwner {
+        require(newOwner != address(0), "New owner is the zero address");
+        contractOwner = newOwner;
+        emit OwnershipTransferred(contractOwner, newOwner);
+    }
 
+    // ____________________ View Functions ____________________
     /**
      * @notice Retrieves the owner of a specific domain.
      * @param domainName The name of the domain to query.
@@ -193,8 +221,7 @@ contract DomainRegistry {
         return registeredDomainNames;
     }
 
-    // Internal Helper Functions
-
+    // ____________________ Internal Helper Functions ____________________
     /**
      * @dev Validates a domain name to ensure it meets the criteria for a top-level domain.
      * @param domainName The domain name to validate.
