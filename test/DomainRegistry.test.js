@@ -11,7 +11,7 @@ describe("DomainRegistry", function () {
         "invalid--2",
         "-invalid-",
         "-startHyphen",
-        "инвалид3",
+        "инвалид",
         "",
         " ",
     ];

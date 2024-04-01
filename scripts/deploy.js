@@ -6,13 +6,12 @@ async function main() {
 
     // Деплоим контракт DomainRegistry
     const DomainRegistry = await DomainRegistryFactory.deploy();
-
-    // Ожидаем успешное развертывание контракта
-    await simpleMessage.waitForDeployment();
-    const contractAddr = await simpleMessage.getAddress();
-    console.log("SimpleMessage deployed to:", contractAddr);
-
     console.log(`DomainRegistry deployed to: ${DomainRegistry.address}`);
+
+    // // Ожидаем успешное развертывание контракта
+    // await simpleMessage.waitForDeployment();
+    // const contractAddr = await simpleMessage.getAddress();
+    // console.log("SimpleMessage deployed to:", contractAddr);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
