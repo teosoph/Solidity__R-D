@@ -16,17 +16,16 @@ pragma solidity ^0.8.19;
  * 2. Domain Ownership:
  *    - Offers functions to verify the ownership of a domain and enumerate all domains registered by a specific address.
  *    - `getDomainOwner(string memory domainName)` returns the ownership information of a specific domain.
- *    - `getDomainsByOwner(address ownerAddress)` shows the total number of domains registered by the address and lists all domains registered by a particular address.
- *    - `getDomainDetails(string memory domainName)` retrieves detailed information about a specific domain, including its owner and registration date, to confirm domain registration status.
- *    - `getAllRegisteredDomains` retrieves information about registered domains.
+ *    - `getAllRegisteredDomains` retrieves information about all registered domains, providing transparency and enabling verification.
  *
  * 3. Registration Fee Management:
  *    - Allows the contract owner to update the registration fee, facilitating dynamic adjustments to the domain registration cost.
  *    - `updateRegistrationFee(uint256 newFee)` lets the contract owner modify the fee required for new domain registrations. The fee is specified in Wei.
  *
  * 4. Domain Validation:
- *    - Ensures that only valid top-level domains are registered by enforcing specific criteria.
- *    - Validation checks include ensuring the domain's length is within the `MIN_DOMAIN_LENGTH` and `MAX_DOMAIN_LENGTH` bounds, and that it consists only of lowercase letters (a-z), numbers (0-9), or hyphens (-), without starting or ending with a '-'.
+ *    - Ensures that only valid top-level domains are registered by enforcing specific criteria, adhering to RFC 1035 for domain name syntax.
+ *    - Validation checks include ensuring the domain's length is within the `MIN_DOMAIN_LENGTH` and `MAX_DOMAIN_LENGTH` bounds,
+ *      and that it consists only of lowercase letters (a-z), numbers (0-9), or hyphens (-), without starting or ending with a '-'.
  *    - `isValidTopLevelDomain(string memory domainName)` performs internal validation of a domain name to ensure it adheres to these rules.
  *
  * 5. Events for Activity Tracking:
@@ -34,7 +33,7 @@ pragma solidity ^0.8.19;
  *    - `FeeUpdated`: Fired when the registration fee is modified by the contract owner, detailing the new fee amount.
  *
  * 6. Monitoring and Statistics:
- *    - Maintains a count of the total number of domains registered within the contract through `totalDomainsRegistered`, enabling tracking of contract activity.
+ *    - Maintains a count of the total number of domains registered within the contract through `totalDomainsRegistered`, enabling tracking of contract activity and domain proliferation.
  *
  * Security Considerations:
  *   - Implements fundamental safeguards to mitigate common risks, such as duplicate registrations and non-payment of registration fees.
@@ -51,15 +50,6 @@ contract DomainRegistry {
     uint8 constant MIN_DOMAIN_LENGTH = 1; // Minimum length of a domain name.
     uint8 constant MAX_DOMAIN_LENGTH = 63; // Maximum length of a domain name.
 
-    // ____________________ Structs ____________________
-    /**
-     * @dev Represents a domain with its owner and the registration date.
-     */
-    struct Domain {
-        address owner; // Owner of the domain.
-        uint256 registrationDate; // Timestamp of the domain registration.
-    }
-
     // ____________________ State variables ____________________
     /// @notice Owner of the contract
     address public contractOwner;
@@ -75,23 +65,17 @@ contract DomainRegistry {
 
     // ____________________ Data mappings ____________________
     /**
-     * @dev Stores domain details, accessible by domain name.
+     * @dev Maps domain names to the addresses of their respective owners.
      */
-    mapping(string => Domain) private domains;
-
-    /**
-     * @dev Stores list of domains owned by an address.
-     */
-    mapping(address => string[]) private domainsByOwner;
+    mapping(string => address) private domains;
 
     // ____________________ Events ____________________
     /**
      * @dev Emitted when a domain is successfully registered.
      * @param domainName Name of the registered domain.
      * @param owner Address of the domain's owner.
-     * @param timestamp Registration timestamp.
      */
-    event DomainRegistered(string domainName, address indexed owner, uint256 timestamp);
+    event DomainRegistered(string domainName, address indexed owner);
 
     /**
      * @dev Emitted when ownership of the contract is transferred.
@@ -109,7 +93,7 @@ contract DomainRegistry {
 
     // ____________________ Modifiers ____________________
     /**
-     * @dev Ensures the caller is the owner of the contract.
+     * @dev Ensures that a function is callable only by the contract owner.
      */
     modifier onlyOwner() {
         require(msg.sender == contractOwner, "Caller is not the owner");
@@ -130,25 +114,26 @@ contract DomainRegistry {
     /**
      * @notice Registers a new domain.
      * @dev Registers a domain if it is valid and not already registered. Charges a fee and transfers it to the owner.
+     * The time of registration can be inferred from the block timestamp associated with the DomainRegistered event.
+     * This function does not return a value but emits a DomainRegistered event upon successful domain registration.
      * @param domainName The domain name to register.
      */
     function registerDomain(string memory domainName) external payable {
         require(msg.value == registrationFee, "Incorrect registration fee");
         require(isValidTopLevelDomain(domainName), "Invalid domain format");
-        require(domains[domainName].owner == address(0), "Domain is already registered");
+        require(domains[domainName] == address(0), "Domain is already registered");
 
         // Update the contract state
-        domains[domainName] = Domain(msg.sender, block.timestamp);
-        domainsByOwner[msg.sender].push(domainName);
-        totalDomainsRegistered++;
+        domains[domainName] = msg.sender;
         registeredDomainNames.push(domainName);
+        totalDomainsRegistered++;
 
         // Transfer the registration fee to the owner immediately upon receiving it.
         (bool success, ) = contractOwner.call{value: msg.value}("");
         require(success, "Transfer failed");
 
         // Generate an event after all changes and successful transfer of funds
-        emit DomainRegistered(domainName, msg.sender, block.timestamp);
+        emit DomainRegistered(domainName, msg.sender);
     }
 
     // ____________________ Contract Management Functions ____________________
@@ -188,25 +173,6 @@ contract DomainRegistry {
      * @return The address of the domain owner.
      */
     function getDomainOwner(string memory domainName) public view returns (address) {
-        return domains[domainName].owner;
-    }
-
-    /**
-     * @notice Retrieves a list of domains registered by a specific address and the total number of domains.
-     * @param ownerAddress The address to query.
-     * @return A tuple containing the total number of domains registered by the address and a list of domain names owned by the address.
-     */
-    function getDomainsByOwner(address ownerAddress) public view returns (uint256, string[] memory) {
-        return (domainsByOwner[ownerAddress].length, domainsByOwner[ownerAddress]);
-    }
-
-    /**
-     * @notice Retrieves detailed information about a specific domain.
-     * @dev Returns the details of a domain, including its owner and registration date. This function is useful for external callers to get detailed information about a domain's registration. If the domain is not registered, the function returns a domain with a zero address as the owner and a zero value for the registration date. It's important to check the owner address to confirm domain registration.
-     * @param domainName The name of the domain for which details are being requested. This should be a valid domain name that adheres to the contract's domain name validation rules.
-     * @return A `Domain` struct containing the owner address and the timestamp of the domain's registration. If the domain is not registered, the owner will be the zero address, and the registration date will be zero.
-     */
-    function getDomainDetails(string memory domainName) public view returns (Domain memory) {
         return domains[domainName];
     }
 

@@ -1,9 +1,10 @@
 const { expect } = require("chai");
 
 describe("DomainRegistry", function () {
-    let domainRegistry, owner;
+    let domainRegistry;
+    let owner, addr1, addr2;
     const registrationFee = ethers.utils.parseEther("0.01");
-    const validDomains = ["gamma", "delta", "beta", "alpha", "example", "com"];
+    const validDomains = ["gamma", "delta", "beta", "alpha", "example", "com", "nasa", "gov", "ua"];
     const invalidDomains = [
         "!@#$%^&*()",
         "------",
@@ -17,23 +18,23 @@ describe("DomainRegistry", function () {
     ];
 
     beforeEach(async function () {
-        [owner] = await ethers.getSigners();
+        [owner, addr1, addr2] = await ethers.getSigners();
         const DomainRegistry = await ethers.getContractFactory("DomainRegistry");
         domainRegistry = await DomainRegistry.deploy();
     });
 
-    const registerDomain = async (domainName, withDelay = false) => {
+    const registerDomain = async (signer, domainName, withDelay = false) => {
         if (withDelay) {
-            const getRandomDelay = () => Math.floor(Math.random() * (2500 - 500 + 1) + 500);
-            await new Promise((resolve) => setTimeout(resolve, getRandomDelay()));
+            const delay = Math.floor(Math.random() * 5000) + 1000; // Random delay between 1 and 5 seconds
+            await new Promise((resolve) => setTimeout(resolve, delay));
         }
-        return domainRegistry.connect(owner).registerDomain(domainName, { value: registrationFee });
+        return await domainRegistry.connect(signer).registerDomain(domainName, { value: registrationFee });
     };
 
     describe("1. Domain Registration", function () {
         it("1.1: should allow a user to register a valid domain", async function () {
             for (const domain of validDomains) {
-                await registerDomain(domain);
+                await registerDomain(owner, domain);
                 const domainOwner = await domainRegistry.getDomainOwner(domain);
                 expect(domainOwner).to.equal(owner.address);
             }
@@ -41,9 +42,10 @@ describe("DomainRegistry", function () {
 
         it("1.2: should not allow domain registration with an invalid domain format", async function () {
             for (const domain of invalidDomains) {
-                await expect(registerDomain(domain)).to.be.revertedWith("Invalid domain format");
+                await expect(registerDomain(owner, domain)).to.be.revertedWith("Invalid domain format");
             }
         });
+
         it("1.3: should allow non-owner to register a domain with sufficient fee", async function () {
             const [_, nonOwner] = await ethers.getSigners();
             const domainName = validDomains[0];
@@ -59,7 +61,7 @@ describe("DomainRegistry", function () {
     describe("2. Ownership  and  Fee Management ", function () {
         it("2.1: should return the correct owner of a domain", async function () {
             const domain = validDomains[0];
-            await registerDomain(domain);
+            await registerDomain(owner, domain, false);
             const domainOwner = await domainRegistry.getDomainOwner(domain);
             expect(domainOwner).to.equal(owner.address);
             console.log(`Owner of domain "${domain}" is ${domainOwner}`);
@@ -111,64 +113,123 @@ describe("DomainRegistry", function () {
     });
 
     describe("3. Metrics, Sorting, and Domain Retrieval", function () {
-        it("3.1: should sort domains by registration date for the same owner", async function () {
-            let domainRegistrations = [];
-            for (const domain of validDomains) {
-                await new Promise((resolve) => setTimeout(resolve, Math.floor(Math.random() * (2500 - 500 + 1) + 500)));
-                const tx = await registerDomain(domain, false);
+        let accounts;
+
+        beforeEach(async function () {
+            accounts = await ethers.getSigners();
+        });
+
+        it("3.1: should calculate the total number of registered domains", async function () {
+            for (const [index, domain] of validDomains.entries()) {
+                const signer = accounts[index % 3];
+                await registerDomain(signer, domain, false);
+            }
+
+            const filter = domainRegistry.filters.DomainRegistered();
+            const events = await domainRegistry.queryFilter(filter);
+
+            expect(events.length).to.equal(validDomains.length);
+
+            const totalRegistered = await domainRegistry.totalDomainsRegistered();
+            expect(totalRegistered).to.equal(validDomains.length);
+
+            console.log(`Total domains registered in contract: ${totalRegistered} and in this test: ${events.length}`);
+        });
+
+        it("3.2: should sort and list all registered domains by registration date", async function () {
+            for (const [index, domain] of validDomains.entries()) {
+                const signer = accounts[index % 3];
+                await registerDomain(signer, domain, true);
+            }
+
+            const filter = domainRegistry.filters.DomainRegistered();
+            const events = await domainRegistry.queryFilter(filter);
+
+            const sortedDomains = await Promise.all(
+                events.map(async (event) => {
+                    const block = await ethers.provider.getBlock(event.blockNumber);
+                    return { domainName: event.args.domainName, timestamp: block.timestamp };
+                }),
+            );
+
+            sortedDomains.sort((a, b) => a.timestamp - b.timestamp);
+
+            console.log("All domains sorted by registration date:");
+            sortedDomains.forEach((reg) => {
+                console.log(`${reg.domainName}: registered at ${new Date(reg.timestamp * 1000).toLocaleString()}`);
+            });
+        });
+
+        it("3.3: should list domains registered by a specific controller, sorted by registration date", async function () {
+            for (let i = 0; i < validDomains.length; i++) {
+                const signer = accounts[i % 3];
+                const domainName = validDomains[i];
+                await registerDomain(signer, domainName, true);
+            }
+
+            const specificControllerIndex = Math.floor(Math.random() * 3);
+            const specificController = accounts[specificControllerIndex];
+
+            const filter = domainRegistry.filters.DomainRegistered(null, specificController.address);
+            const events = await domainRegistry.queryFilter(filter);
+
+            const registrations = await Promise.all(
+                events.map(async (event) => {
+                    const block = await ethers.provider.getBlock(event.blockHash);
+                    return {
+                        domainName: event.args.domainName,
+                        timestamp: block.timestamp,
+                    };
+                }),
+            );
+
+            registrations.sort((a, b) => a.timestamp - b.timestamp);
+
+            console.log(`Domains registered by controller ${specificController.address}, sorted by registration date:`);
+            registrations.forEach((reg) => {
+                console.log(`${reg.domainName}: registered at ${new Date(reg.timestamp * 1000).toLocaleString()}`);
+            });
+        });
+
+        it("3.4: should list domains registered by multiple controllers and sort them by registration date", async function () {
+            const domainRegistrations = [];
+            for (let i = 0; i < validDomains.length; i++) {
+                const signer = accounts[i % accounts.length];
+                const domainName = validDomains[i];
+                const tx = await registerDomain(signer, domainName, true);
                 const receipt = await tx.wait();
-                const event = receipt.events.find((e) => e.event === "DomainRegistered");
+                const block = await ethers.provider.getBlock(receipt.blockNumber);
                 domainRegistrations.push({
-                    domainName: domain,
-                    timestamp: event.args.timestamp.toNumber(),
+                    domainName,
+                    owner: signer.address,
+                    timestamp: block.timestamp,
                 });
             }
+
             domainRegistrations.sort((a, b) => a.timestamp - b.timestamp);
-            domainRegistrations.forEach((reg) =>
+
+            domainRegistrations.forEach((reg) => {
                 console.log(
-                    `Domain name "${reg.domainName}" registered at ${new Date(reg.timestamp * 1000).toLocaleString()}`,
-                ),
-            );
-        });
-        it("3.2: should list domains registered by a specific owner, sorted by name", async function () {
-            let domainDetails = [];
-            for (const domain of validDomains) {
-                await registerDomain(domain);
-                const details = await domainRegistry.getDomainDetails(domain);
-                domainDetails.push({ name: domain, registrationDate: details.registrationDate });
-            }
-            domainDetails.sort((a, b) => a.name.localeCompare(b.name));
-            console.log("Domains sorted by name:");
-            domainDetails.forEach((domain) =>
-                console.log(
-                    `Domain name "${domain.name}" registered at ${new Date(
-                        domain.registrationDate * 1000,
+                    `${reg.domainName}: registered by ${reg.owner} at ${new Date(
+                        reg.timestamp * 1000,
                     ).toLocaleString()}`,
-                ),
-            );
+                );
+            });
+
+            expect(domainRegistrations.length).to.equal(validDomains.length);
         });
 
-        it("3.3: should correctly retrieve domains and their count for an owner address", async function () {
+        it("3.5: should list all registered domains correctly by getAllRegisteredDomains() method for the contract", async function () {
             for (const domain of validDomains) {
-                await registerDomain(domain);
+                await domainRegistry.connect(owner).registerDomain(domain, { value: registrationFee });
+                console.log(`Domain registered: ${domain}`);
             }
-            const [count, domains] = await domainRegistry.getDomainsByOwner(owner.address);
-            expect(count).to.equal(validDomains.length);
-            console.log(`Total domains registered by the owner (${owner.address}): ${count}`);
-            console.log("List of registered domains:", domains.join(", "));
-        });
-        it("3.4: should retrieve all registered domains without sorting", async function () {
-            for (const domain of validDomains) {
-                await registerDomain(domain, false);
-            }
+            const registeredDomains = await domainRegistry.getAllRegisteredDomains();
 
-            const allDomains = await domainRegistry.getAllRegisteredDomains();
-            console.log("All registered domains:", allDomains);
-            expect(allDomains.length).to.equal(validDomains.length);
+            console.log(`Registered domains by getAllRegisteredDomains() method: ${registeredDomains.join(", ")}`);
 
-            for (const domain of validDomains) {
-                expect(allDomains).to.include(domain);
-            }
+            expect(registeredDomains.length).to.equal(validDomains.length);
+            expect(registeredDomains).to.have.members(validDomains);
         });
     });
 
@@ -179,13 +240,13 @@ describe("DomainRegistry", function () {
 
             const minDomain = "a".repeat(MIN_DOMAIN_LENGTH);
             const maxDomain = "b".repeat(MAX_DOMAIN_LENGTH);
-            await expect(registerDomain(minDomain)).to.emit(domainRegistry, "DomainRegistered");
-            await expect(registerDomain(maxDomain)).to.emit(domainRegistry, "DomainRegistered");
+            await expect(registerDomain(owner, minDomain, false)).to.emit(domainRegistry, "DomainRegistered");
+            await expect(registerDomain(owner, maxDomain, false)).to.emit(domainRegistry, "DomainRegistered");
 
             const overMinDomain = "a".repeat(MIN_DOMAIN_LENGTH - 1);
             const overMaxDomain = "b".repeat(MAX_DOMAIN_LENGTH + 1);
-            await expect(registerDomain(overMinDomain)).to.be.revertedWith("Invalid domain format");
-            await expect(registerDomain(overMaxDomain)).to.be.revertedWith("Invalid domain format");
+            await expect(registerDomain(owner, overMinDomain, false)).to.be.revertedWith("Invalid domain format");
+            await expect(registerDomain(owner, overMaxDomain, false)).to.be.revertedWith("Invalid domain format");
         });
     });
 
@@ -214,7 +275,9 @@ describe("DomainRegistry", function () {
             expect(event.args.domainName).to.equal(domainName);
             expect(event.args.owner).to.equal(nonOwner.address);
 
-            expect(event.args.timestamp).to.be.at.least(1);
+            const block = await ethers.provider.getBlock(receipt.blockNumber);
+
+            expect(block.timestamp).to.be.a("number").that.is.greaterThan(0);
         });
 
         it("5.4: should reject registration with more than required registration fee", async function () {
@@ -238,9 +301,12 @@ describe("DomainRegistry", function () {
 
     describe("6. Domain Re-registration", function () {
         it("6.1: should reject registration of a domain already registered by another user", async function () {
-            await registerDomain(validDomains[0]);
-            const anotherOwner = (await ethers.getSigners())[1];
-            await expect(registerDomain(validDomains[0], false, registrationFee, anotherOwner)).to.be.revertedWith(
+            const [owner, anotherOwner] = await ethers.getSigners();
+            const domainName = validDomains[0];
+
+            await registerDomain(owner, domainName, false);
+
+            await expect(registerDomain(anotherOwner, domainName, false)).to.be.revertedWith(
                 "Domain is already registered",
             );
         });
@@ -248,8 +314,10 @@ describe("DomainRegistry", function () {
 
     describe("7. Event Checks", function () {
         it("7.1: should emit DomainRegistered on domain registration", async function () {
+            const [owner] = await ethers.getSigners();
+
             const domainName = validDomains[0];
-            await expect(registerDomain(domainName)).to.emit(domainRegistry, "DomainRegistered");
+            await expect(registerDomain(owner, domainName)).to.emit(domainRegistry, "DomainRegistered");
         });
 
         it("7.2: should emit FeeUpdated on registration fee update", async function () {
