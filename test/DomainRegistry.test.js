@@ -42,7 +42,10 @@ describe("DomainRegistry", function () {
 
         it("1.2: should not allow domain registration with an invalid domain format", async function () {
             for (const domain of invalidDomains) {
-                await expect(registerDomain(owner, domain)).to.be.revertedWith("Invalid domain format");
+                await expect(registerDomain(owner, domain)).to.be.revertedWithCustomError(
+                    domainRegistry,
+                    "InvalidDomainFormat",
+                );
             }
         });
 
@@ -75,16 +78,19 @@ describe("DomainRegistry", function () {
             expect(updatedFee).to.equal(newFee);
 
             const someOtherAccount = (await ethers.getSigners())[1];
+
             await expect(
                 domainRegistry.connect(someOtherAccount).updateRegistrationFee(registrationFee),
-            ).to.be.revertedWith("Caller is not the owner");
+            ).to.be.revertedWithCustomError(domainRegistry, "OnlyOwnerAllowed");
         });
 
         it("2.3: should revert fee update attempts by non-owner accounts", async function () {
             const newFee = ethers.utils.parseEther("0.02");
             const nonOwner = (await ethers.getSigners())[1];
-            await expect(domainRegistry.connect(nonOwner).updateRegistrationFee(newFee)).to.be.revertedWith(
-                "Caller is not the owner",
+
+            await expect(domainRegistry.connect(nonOwner).updateRegistrationFee(newFee)).to.be.revertedWithCustomError(
+                domainRegistry,
+                "OnlyOwnerAllowed",
             );
         });
 
@@ -94,8 +100,9 @@ describe("DomainRegistry", function () {
             const highFee = ethers.utils.parseEther("0.9");
             const extremeHighFee = ethers.utils.parseEther("10000");
 
-            await expect(domainRegistry.updateRegistrationFee(extremeLowFee)).to.be.revertedWith(
-                "Fee cannot be negative or zero",
+            await expect(domainRegistry.updateRegistrationFee(extremeLowFee)).to.be.revertedWithCustomError(
+                domainRegistry,
+                "FeeCannotBeNegativeOrZero",
             );
 
             await expect(domainRegistry.updateRegistrationFee(lowFee))
@@ -106,8 +113,9 @@ describe("DomainRegistry", function () {
                 .to.emit(domainRegistry, "FeeUpdated")
                 .withArgs(highFee);
 
-            await expect(domainRegistry.updateRegistrationFee(extremeHighFee)).to.be.revertedWith(
-                "Fee exceeds maximum allowed value",
+            await expect(domainRegistry.updateRegistrationFee(extremeHighFee)).to.be.revertedWithCustomError(
+                domainRegistry,
+                "FeeExceedsMaximumAllowed",
             );
         });
     });
@@ -219,17 +227,28 @@ describe("DomainRegistry", function () {
             expect(domainRegistrations.length).to.equal(validDomains.length);
         });
 
-        it("3.5: should list all registered domains correctly by getAllRegisteredDomains() method for the contract", async function () {
+        it("3.5: should list all registered domains correctly using pagination", async function () {
+            // Register some domains
             for (const domain of validDomains) {
-                await domainRegistry.connect(owner).registerDomain(domain, { value: registrationFee });
+                await registerDomain(owner, domain);
                 console.log(`Domain registered: ${domain}`);
             }
-            const registeredDomains = await domainRegistry.getAllRegisteredDomains();
 
-            console.log(`Registered domains by getAllRegisteredDomains() method: ${registeredDomains.join(", ")}`);
+            // Assume totalDomainsRegistered is updated correctly upon each registration
+            const totalRegistered = await domainRegistry.totalDomainsRegistered();
+            const pageSize = 5; // Define a page size
+            let allDomains = [];
 
-            expect(registeredDomains.length).to.equal(validDomains.length);
-            expect(registeredDomains).to.have.members(validDomains);
+            // Fetch domains in pages
+            for (let i = 0; i < totalRegistered; i += pageSize) {
+                const domains = await domainRegistry.getDomainNamesByIndex(i, Math.min(i + pageSize, totalRegistered));
+                allDomains = [...allDomains, ...domains];
+            }
+
+            // Log and test
+            console.log(`Registered domains fetched by pagination: ${allDomains.join(", ")}`);
+            expect(allDomains.length).to.equal(validDomains.length);
+            expect(allDomains).to.include.members(validDomains); // Ensure all registered domains are included
         });
     });
 
@@ -245,8 +264,14 @@ describe("DomainRegistry", function () {
 
             const overMinDomain = "a".repeat(MIN_DOMAIN_LENGTH - 1);
             const overMaxDomain = "b".repeat(MAX_DOMAIN_LENGTH + 1);
-            await expect(registerDomain(owner, overMinDomain, false)).to.be.revertedWith("Invalid domain format");
-            await expect(registerDomain(owner, overMaxDomain, false)).to.be.revertedWith("Invalid domain format");
+            await expect(registerDomain(owner, overMinDomain)).to.be.revertedWithCustomError(
+                domainRegistry,
+                "InvalidDomainFormat",
+            );
+            await expect(registerDomain(owner, overMaxDomain)).to.be.revertedWithCustomError(
+                domainRegistry,
+                "InvalidDomainFormat",
+            );
         });
     });
 
@@ -255,14 +280,14 @@ describe("DomainRegistry", function () {
             const insufficientFee = registrationFee.sub(ethers.utils.parseUnits("0.0001", "ether"));
             await expect(
                 domainRegistry.connect(owner).registerDomain(validDomains[0], { value: insufficientFee }),
-            ).to.be.revertedWith("Incorrect registration fee");
+            ).to.be.revertedWithCustomError(domainRegistry, "IncorrectRegistrationFee");
         });
 
         it("5.2: should reject registration with excessive ether", async function () {
             const excessiveFee = registrationFee.add(ethers.utils.parseUnits("0.1", "ether"));
             await expect(
                 domainRegistry.connect(owner).registerDomain(validDomains[0], { value: excessiveFee }),
-            ).to.be.revertedWith("Incorrect registration fee");
+            ).to.be.revertedWithCustomError(domainRegistry, "IncorrectRegistrationFee");
         });
 
         it("5.3: should accept registration with exact registration fee", async function () {
@@ -285,8 +310,8 @@ describe("DomainRegistry", function () {
             const domainName = validDomains[Math.floor(Math.random() * validDomains.length)];
             const excessiveFee = registrationFee.add(ethers.utils.parseUnits("0.001", "ether"));
             await expect(
-                domainRegistry.connect(nonOwner).registerDomain(domainName, { value: excessiveFee }),
-            ).to.be.revertedWith("Incorrect registration fee");
+                domainRegistry.connect(owner).registerDomain(validDomains[0], { value: excessiveFee }),
+            ).to.be.revertedWithCustomError(domainRegistry, "IncorrectRegistrationFee");
         });
 
         it("5.5: should reject registration with less than required registration fee by a tiny amount", async function () {
@@ -295,7 +320,7 @@ describe("DomainRegistry", function () {
             const slightlyLessFee = registrationFee.sub(ethers.utils.parseUnits("0.0001", "ether"));
             await expect(
                 domainRegistry.connect(nonOwner).registerDomain(domainName, { value: slightlyLessFee }),
-            ).to.be.revertedWith("Incorrect registration fee");
+            ).to.be.revertedWithCustomError(domainRegistry, "IncorrectRegistrationFee");
         });
     });
 
@@ -306,8 +331,9 @@ describe("DomainRegistry", function () {
 
             await registerDomain(owner, domainName, false);
 
-            await expect(registerDomain(anotherOwner, domainName, false)).to.be.revertedWith(
-                "Domain is already registered",
+            await expect(registerDomain(anotherOwner, domainName)).to.be.revertedWithCustomError(
+                domainRegistry,
+                "DomainAlreadyRegistered",
             );
         });
     });

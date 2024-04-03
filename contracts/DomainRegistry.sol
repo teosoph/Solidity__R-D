@@ -10,13 +10,12 @@ pragma solidity ^0.8.19;
  * 1. Domain Registration:
  *    - Enables users to register top-level domains (TLDs), for example, "example", without extensions like ".com".
  *    - Registration requires a fixed ETH fee, which is set by the contract owner and directly transferred to the owner upon registration.
- *    - Each domain's registration details, including the owner's address and registration timestamp, are recorded.
  *    - The `registerDomain(string memory domainName)` function allows users to register a new domain, provided it's not already taken and meets the validation criteria.
  *
  * 2. Domain Ownership:
  *    - Offers functions to verify the ownership of a domain and enumerate all domains registered by a specific address.
  *    - `getDomainOwner(string memory domainName)` returns the ownership information of a specific domain.
- *    - `getAllRegisteredDomains` retrieves information about all registered domains, providing transparency and enabling verification.
+ *    - Pagination implemented in domain retrieval enhances performance and manages memory efficiently when dealing with large sets of data.
  *
  * 3. Registration Fee Management:
  *    - Allows the contract owner to update the registration fee, facilitating dynamic adjustments to the domain registration cost.
@@ -49,6 +48,18 @@ contract DomainRegistry {
     uint256 public constant MAX_REGISTRATION_FEE = 1 ether; // Maximum value example
     uint8 constant MIN_DOMAIN_LENGTH = 1; // Minimum length of a domain name.
     uint8 constant MAX_DOMAIN_LENGTH = 63; // Maximum length of a domain name.
+
+    // ____________________ Custom Errors ____________________
+    error OnlyOwnerAllowed(string message);
+    error IncorrectRegistrationFee(string message);
+    error InvalidDomainFormat(string message);
+    error DomainAlreadyRegistered(string message);
+    error TransferFailed(string message);
+    error FeeCannotBeNegativeOrZero(string message);
+    error FeeExceedsMaximumAllowed(string message);
+    error StartIndexMustBeLessThanEndIndex(string message);
+    error EndIndexExceedsTotalDomains(string message);
+    error NewOwnerIsZeroAddress(string message);
 
     // ____________________ State variables ____________________
     /// @notice Owner of the contract
@@ -96,7 +107,8 @@ contract DomainRegistry {
      * @dev Ensures that a function is callable only by the contract owner.
      */
     modifier onlyOwner() {
-        require(msg.sender == contractOwner, "Caller is not the owner");
+        if (msg.sender != contractOwner) revert OnlyOwnerAllowed("Caller is not the owner");
+
         _;
     }
 
@@ -119,9 +131,9 @@ contract DomainRegistry {
      * @param domainName The domain name to register.
      */
     function registerDomain(string memory domainName) external payable {
-        require(msg.value == registrationFee, "Incorrect registration fee");
-        require(isValidTopLevelDomain(domainName), "Invalid domain format");
-        require(domains[domainName] == address(0), "Domain is already registered");
+        if (msg.value != registrationFee) revert IncorrectRegistrationFee("Incorrect registration fee");
+        if (!isValidTopLevelDomain(domainName)) revert InvalidDomainFormat("Invalid domain format");
+        if (domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
 
         // Update the contract state
         domains[domainName] = msg.sender;
@@ -130,7 +142,7 @@ contract DomainRegistry {
 
         // Transfer the registration fee to the owner immediately upon receiving it.
         (bool success, ) = contractOwner.call{value: msg.value}("");
-        require(success, "Transfer failed");
+        if (!success) revert TransferFailed("Transfer failed");
 
         // Generate an event after all changes and successful transfer of funds
         emit DomainRegistered(domainName, msg.sender);
@@ -149,8 +161,8 @@ contract DomainRegistry {
      * @param newFee The new registration fee in Wei. Must be non-negative and not exceed the maximum allowed fee.
      */
     function updateRegistrationFee(uint256 newFee) external onlyOwner {
-        require(newFee > 0, "Fee cannot be negative or zero");
-        require(newFee <= MAX_REGISTRATION_FEE, "Fee exceeds maximum allowed value");
+        if (newFee <= 0) revert FeeCannotBeNegativeOrZero("Fee cannot be negative or zero");
+        if (newFee > MAX_REGISTRATION_FEE) revert FeeExceedsMaximumAllowed("Fee exceeds the maximum allowed limit");
 
         registrationFee = newFee;
         emit FeeUpdated(newFee);
@@ -161,7 +173,7 @@ contract DomainRegistry {
      * @param newOwner The address to transfer ownership to.
      */
     function transferOwnership(address newOwner) public onlyOwner {
-        require(newOwner != address(0), "New owner is the zero address");
+        if (newOwner == address(0)) revert NewOwnerIsZeroAddress("New owner address cannot be the zero address");
         contractOwner = newOwner;
         emit OwnershipTransferred(contractOwner, newOwner);
     }
@@ -177,14 +189,30 @@ contract DomainRegistry {
     }
 
     /**
-     * @notice  Returns the names of all registered domains.
-     * @dev This function allows anyone to retrieve a list of all domain names that have been registered in the contract. It provides a way to
-     * enumerate all registered domains, which can be useful for various client applications or external contracts to understand the
-     * state of domain registrations.
-     * @return A string array containing all the domain names registered in the contract.
+     * @notice Retrieves a subset of registered domain names between specified indices.
+     * @dev This function implements pagination by allowing callers to specify a range of indices.
+     * It helps manage large sets of domain names by fetching them in smaller, manageable batches.
+     * @param startIndex The index to start fetching domain names from (inclusive).
+     * @param endIndex The index to stop fetching domain names (exclusive).
+     * @return domainNames A string array containing the domain names within the specified range.
      */
-    function getAllRegisteredDomains() public view returns (string[] memory) {
-        return registeredDomainNames;
+    function getDomainNamesByIndex(
+        uint256 startIndex,
+        uint256 endIndex
+    ) public view returns (string[] memory domainNames) {
+        if (startIndex >= endIndex)
+            revert StartIndexMustBeLessThanEndIndex("Start index must be less than the end index");
+        if (endIndex > registeredDomainNames.length)
+            revert EndIndexExceedsTotalDomains("End index exceeds the total number of domains");
+
+        uint256 count = endIndex - startIndex; // Calculate the number of domain names to be returned.
+        domainNames = new string[](count); // Initialize the array to hold the domain names.
+
+        for (uint256 i = startIndex; i < endIndex; ++i) {
+            domainNames[i - startIndex] = registeredDomainNames[i]; // Populate the array with domain names.
+        }
+
+        return domainNames; // Return the populated array of domain names.
     }
 
     // ____________________ Internal Helper Functions ____________________
@@ -197,32 +225,43 @@ contract DomainRegistry {
         bytes memory domainBytes = bytes(domainName);
         uint256 domainLength = domainBytes.length;
 
+        // Check the domain name meets the minimum and maximum length requirements.
         if (domainLength < MIN_DOMAIN_LENGTH || domainLength > MAX_DOMAIN_LENGTH) {
             return false;
         }
+
+        // Ensure the domain name does not start or end with a hyphen (-).
         if (domainBytes[0] == bytes1(uint8(45)) || domainBytes[domainLength - 1] == bytes1(uint8(45))) {
             return false;
         }
 
-        bool previousWasDash = false;
-        for (uint i = 0; i < domainLength; i++) {
+        bool previousWasDash = false; // Track consecutive dashes.
+        for (uint i = 0; i < domainLength; ++i) {
             bytes1 b = domainBytes[i];
 
+            // Check for consecutive dashes, which are not allowed.
             if (b == bytes1(uint8(45))) {
                 if (previousWasDash) {
                     return false;
                 }
                 previousWasDash = true;
-            } else if (
-                (b >= bytes1(uint8(48)) && b <= bytes1(uint8(57))) ||
-                (b >= bytes1(uint8(97)) && b <= bytes1(uint8(122)))
-            ) {
-                continue;
             } else {
-                return false;
+                // Reset dash tracker for non-dash characters and
+                // ensure characters are either numbers (0-9) or lowercase letters (a-z).
+                previousWasDash = false;
+                if (
+                    (b >= bytes1(uint8(48)) && b <= bytes1(uint8(57))) || // Numbers 0-9
+                    (b >= bytes1(uint8(97)) && b <= bytes1(uint8(122))) // Lowercase a-z
+                ) {
+                    continue;
+                } else {
+                    // If any character does not match allowed set, return false.
+                    return false;
+                }
             }
         }
 
+        // If all checks pass, the domain name is considered valid.
         return true;
     }
 }
