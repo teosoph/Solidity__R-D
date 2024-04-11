@@ -1,0 +1,40 @@
+{
+  "name": "DomainRegistry",
+  "version": "2.0.0",
+  "description": "",
+  "main": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "node": "hardhat node",
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js",
+    "hardhat:node": "hardhat node",
+    "hardhat:compile": "hardhat compile",
+    "hardhat:compile:force": "hardhat compile --force",
+    "hardhat:test": "hardhat test",
+    "hardhat:test:gas": "REPORT_GAS=true COINMARKETCAP_API_KEY=$(security find-generic-password -w -s 'Coinmarketcap API Key') hardhat test",
+    "hardhat:deploy:localhost": "hardhat run scripts/deployLock.js --network localhost",
+    "hardhat:deploy:counter": "hardhat run scripts/deployCounter.js --network localhost",
+    "hardhat:deploy:sepolia-1": "hardhat run scripts/deploy.js --network sepolia",
+    "hardhat:deploy:sepolia-2": "MNEMONIC=$(security find-generic-password -w -s 'Seed Phrase (for Testnets)') INFURA_API_KEY=$(security find-generic-password -w -s 'Infura API key (Solidity Courses)') hardhat run scripts/deployLock.js --network sepolia",
+    "hardhat:verify:sepolia-1": "hardhat verify --network sepolia <Contract_Address> <Constructor_Arguments>",
+    "hardhat:verify:sepolia-2": "ETHERSCAN_API_KEY=$(security find-generic-password -w -s 'Etherscan API Key') INFURA_API_KEY=$(security find-generic-password -w -s 'Infura API key (Solidity Courses)') hardhat verify --network sepolia 0x4ca86c08a287f1e268e50b927176badb178de1ed 0x0000000000000000000000000000000000000000000000000000000064d2530c",
+    "remixd": "npx remixd -s $(pwd) --remix-ide https://remix.ethereum.org"
+  },
+  "keywords": [],
+  "author": "Ihor Kyrychenko",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "@nomicfoundation/hardhat-toolbox": "^2.0.2",
+    "@openzeppelin/contracts": "^5.0.2",
+    "@openzeppelin/contracts-upgradeable": "^5.0.2",
+    "@openzeppelin/hardhat-upgrades": "^3.0.5",
+    "hardhat": "^2.17.3",
+    "@remix-project/remixd": "^0.6.29",
+    "dotenv": "^16.4.5",
+    "bip39": "^3.1.0"
+    
+  }
+  
+}
