@@ -152,3 +152,10 @@ TEMP
 package-lock.json
 .states/
 
+ignition/deployments/
+
+ignition/modules/V2 copy.js
+ignition/modules/V1 copy.js
+libraries/
+contracts/DomainRegistry2.sol
+tests/DomainRegistry.test.js
