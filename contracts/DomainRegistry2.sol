@@ -1,72 +1,65 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-
-import "@openzeppelin/contracts/utils/Address.sol";
+import {IDomainRegistry} from "./IDomainRegistry.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
  * @title Domain Registry
- * @dev A smart contract for managing the registration and ownership of domains on the Ethereum blockchain.
- * This contract allows users to register domains with a level-based structure similar to DNS, supporting both top-level domains (TLDs) and subdomains.
- * Ownership of domains can be transferred, and registration fees are automatically handled and distributed according to pre-defined rules.
+ * @dev A smart contract for managing the registration and ownership of domains
+ * on the Ethereum blockchain. This contract supports a DNS-like structure for
+ * domain registration, including both top-level and subdomains, and integrates
+ * fee management and transfer capabilities.
  *
  * Key Features and Functions:
  * 1. Domain Registration:
- *    - Users can register both top-level domains and subdomains.
- *    - Registration of a domain requires a fee, which is configurable by the contract owner.
- * A portion of this fee can be distributed to the owner of the parent domain (if applicable).
+ *    - Support for registering top-level domains (TLDs) and subdomains.
+ *    - Domain registration requires a fee, configurable by the contract owner.
+ *    - A portion of this fee may be distributed to the parent domain's owner, if applicable.
  *
  * 2. Domain Ownership and Transfer:
- *    - The contract tracks ownership of domains and allows domain owners to transfer their domains to others.
- *    - Ownership information can be queried using `getDomainOwner`.
+ *    - Tracks ownership of domains and enables owners to transfer domains.
+ *    - Ownership data is accessible via `getDomainOwner`.
  *
  * 3. Fee Management:
- *    - The contract owner can update the registration fee to adjust to market conditions or to modify the business model.
- *    - A percentage of the registration fee for subdomains can be automatically transferred to the parent domain's owner as a form of incentive or revenue sharing.
+ *    - Allows the owner to adjust the registration fee based on market conditions
+ *      or business model changes.
+ *    - A percentage of the fee for subdomains is automatically shared with the parent domain's owner.
  *
  * 4. Automatic Fee Distribution:
- *    - When a domain is registered, the registration fee is automatically distributed. For top-level domains, the entire fee is transferred to the contract owner.
- * For subdomains, a portion of the fee is distributed to the parent domain's owner.
+ *    - Automatically distributes the registration fee upon domain registration.
+ *    - For TLDs, the entire fee is transferred to the contract owner.
+ *    - For subdomains, a portion of the fee is distributed to the parent domain's owner.
  *
  * 5. Upgradeable Contract Design:
- *    - Utilizes OpenZeppelin's upgradeable contract pattern to ensure that the contract can be updated in the future
- *      to add new features or fix potential issues without losing the existing state or domain ownership data.
+ *    - Implements OpenZeppelin's upgradeable contract framework to allow future updates
+ *      without losing existing data or state.
  *
  * 6. Events for Tracking Activities:
- *    - The contract emits events for domain registration and fee updates, providing transparency and allowing tracking of key activities within the contract.
+ *    - Emits events for domain registrations and fee updates to ensure transparency
+ *      and facilitate activity monitoring.
  *
  * Security Considerations:
- *   - The contract includes checks to prevent common issues such as reentrancy attacks during the transfer of funds.
- *   - Access control is implemented using OpenZeppelin's `OwnableUpgradeable` contract to restrict sensitive operations to the contract owner.
+ *   - Includes safeguards like reentrancy checks during fund transfers.
+ *   - Uses OpenZeppelin's `OwnableUpgradeable` for access control, limiting sensitive operations
+ *     to the contract owner.
  *
  * Note:
- *   - This contract is designed to be upgradeable, ensuring longevity and adaptability of the domain registry system on the Ethereum blockchain.
- *   - Feedback and contributions from the community are welcome to enhance the contract's capabilities and security.
+ *   - This upgradeable contract aims to provide a sustainable and adaptable domain registry
+ *     system on the Ethereum blockchain.
+ *   - Community feedback and contributions are encouraged to enhance functionality and security.
  */
 
-contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
+contract DomainRegistryV2 is Initializable, OwnableUpgradeable, IDomainRegistry {
     // ____________________ Constants ____________________
     /// @dev Maximum registration fee allowed.
     uint256 public constant MAX_REGISTRATION_FEE = 1 ether;
+    uint8 internal constant _MIN_DOMAIN_LENGTH = 1; // Minimum length of a domain name.
+    uint8 internal constant _MAX_DOMAIN_LENGTH = 63; // Maximum length of a domain name.
 
     /// @dev Percentage of registration fee to be given to domain owner.
-    uint256 private constant DOMAIN_OWNER_PERCENTAGE = 20;
-
-    // ____________________ Custom Errors ____________________
-    // error OnlyOwnerAllowed(string message);
-    error IncorrectRegistrationFee(string message);
-    error InvalidDomainFormat(string message);
-    error DomainAlreadyRegistered(string message);
-    error TransferFailed(string message);
-    error FeeCannotBeNegativeOrZero(string message);
-    error FeeExceedsMaximumAllowed(string message);
-    error StartIndexMustBeLessThanEndIndex(string message);
-    error EndIndexExceedsTotalDomains(string message);
-    error NewOwnerIsZeroAddress(string message);
-    error NoFundsForWithdrawal(string message);
+    uint8 private constant _DOMAIN_OWNER_PERCENTAGE = 20;
 
     // ____________________ State variables ____________________
     /// @notice Owner of the contract
@@ -79,11 +72,11 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
     uint256 public totalDomainsRegisteredNumber;
 
     /// @dev Array to store the names of all registered domains
-    string[] private registeredDomainNames;
+    string[] private _registeredDomainNames;
 
     // ____________________ Data mappings ____________________
     /// @dev Maps domain names to the addresses of their respective owners.
-    mapping(string => address) private domains;
+    mapping(string domainName => address domainOwner) private _domains;
 
     // ____________________ Events ____________________
     /**
@@ -99,6 +92,21 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      */
     event FeeUpdated(uint256 newFee);
 
+    // ____________________ Custom Errors ____________________
+    error IncorrectRegistrationFee(string message);
+    error InvalidDomainFormat(string message);
+    error DomainAlreadyRegistered(string message);
+    error TransferFailed(string message);
+    error FeeCannotBeNegativeOrZero(string message);
+    error FeeExceedsMaximumAllowed(string message);
+    error StartIndexMustBeLessThanEndIndex(string message);
+    error EndIndexExceedsTotalDomains(string message);
+    error NewOwnerIsZeroAddress(string message);
+    error NoFundsForWithdrawal(string message);
+    error ContractsCannotRegisterDomains(string message);
+    error TransferToOwnerFailed(string message);
+    error TransferToParentDomainOwnerFailed(string message);
+
     // ____________________ Initializer ____________________
     /**
      * @dev Initializes the contract setting the deployer as the initial owner.
@@ -106,7 +114,7 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * and initializes the registration fee to 0.01 ether.
      */
 
-    function initializeV2() public initializer {
+    function initialize() public override initializer {
         __Ownable_init(msg.sender);
         registrationFee = 0.01 ether;
     }
@@ -120,52 +128,20 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * This function does not return a value but emits a DomainRegistered event upon successful domain registration.
      * @param domainName The domain name to register.
      */
-    function registerDomain(string memory domainName) external payable {
-        if (!isValidDomain(domainName)) revert InvalidDomainFormat("Invalid domain format");
-        if (domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
-        if (msg.value < registrationFee) revert IncorrectRegistrationFee("Incorrect registration fee");
-
-        string[] memory parts = splitDomain(domainName);
-        uint256 domainLevel = parts.length;
-        address payable ownerAddress = payable(msg.sender);
-        address payable parentDomainOwner = payable(address(0));
-
-        // Регистрация домена и обновление состояния контракта
-        domains[domainName] = ownerAddress;
-        registeredDomainNames.push(domainName);
-        totalDomainsRegisteredNumber++;
-
-        if (domainLevel == 1) {
-            // Для домена первого уровня весь платеж переводится владельцу контракта
-            (bool sent, ) = contractOwner.call{value: msg.value}("");
-            require(sent, "Failed to send Ether");
-        } else {
-            // Для доменов второго уровня и выше определяем владельца родительского домена
-            string memory parentDomain = parentDomainName(domainName);
-            parentDomainOwner = payable(domains[parentDomain]);
-            if (parentDomainOwner == address(0)) revert InvalidDomainFormat("Parent domain not registered");
-
-            // Расчет и перевод средств
-            uint256 parentPayment = (msg.value * DOMAIN_OWNER_PERCENTAGE) / 100;
-            uint256 ownerPayment = msg.value - parentPayment;
-
-            // 20% владельцу родительского домена
-            (bool parentSent, ) = parentDomainOwner.call{value: parentPayment}("");
-            require(parentSent, "Failed to send Ether to parent domain owner");
-
-            // 80% владельцу контракта
-            (bool ownerSent, ) = contractOwner.call{value: ownerPayment}("");
-            require(ownerSent, "Failed to send Ether to contract owner");
-        }
-        // Генерация события после успешной регистрации домена
-        emit DomainRegistered(domainName, ownerAddress);
+    function registerDomain(string memory domainName) external payable override {
+        _validateDomain(domainName);
+        _performRegistration(domainName);
+        _handlePayments(domainName);
     }
 
     // ____________________ Contract Management Functions ____________________
     /**
-     * @dev Updates the domain registration fee to a new value. This function can only be invoked by the owner of the contract.
-     * It allows the owner to adjust the fee required for new domain registrations. The fee must be a non-negative value and
-     * should not exceed the maximum allowed limit defined by `MAX_REGISTRATION_FEE`, ensuring that the fee remains within
+     * @dev Updates the domain registration fee to a new value.
+     * This function can only be invoked by the owner of the contract.
+     * It allows the owner to adjust the fee required for new domain registrations.
+     * The fee must be a non-negative value and
+     * should not exceed the maximum allowed limit defined by `MAX_REGISTRATION_FEE`,
+     * ensuring that the fee remains within
      * reasonable bounds. The updated fee is specified in Wei. Emits a `FeeUpdated` event upon successful update.
      * Requirements:
      * - The caller must be the contract owner.
@@ -173,7 +149,7 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * - `newFee` must not exceed `MAX_REGISTRATION_FEE`.
      * @param newFee The new registration fee in Wei. Must be non-negative and not exceed the maximum allowed fee.
      */
-    function updateRegistrationFee(uint256 newFee) external onlyOwner {
+    function updateRegistrationFee(uint256 newFee) external override onlyOwner {
         if (newFee <= 0) revert FeeCannotBeNegativeOrZero("Fee cannot be negative or zero");
         if (newFee > MAX_REGISTRATION_FEE) revert FeeExceedsMaximumAllowed("Fee exceeds the maximum allowed limit");
 
@@ -187,8 +163,8 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * @param domainName The name of the domain to query.
      * @return The address of the domain owner.
      */
-    function getDomainOwner(string memory domainName) public view returns (address) {
-        return domains[domainName];
+    function getDomainOwner(string memory domainName) public view override returns (address) {
+        return _domains[domainName];
     }
 
     /**
@@ -202,17 +178,17 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
     function getDomainNamesByIndex(
         uint256 startIndex,
         uint256 endIndex
-    ) public view returns (string[] memory domainNames) {
+    ) public view override returns (string[] memory domainNames) {
         if (startIndex >= endIndex)
             revert StartIndexMustBeLessThanEndIndex("Start index must be less than the end index");
-        if (endIndex > registeredDomainNames.length)
+        if (endIndex > _registeredDomainNames.length)
             revert EndIndexExceedsTotalDomains("End index exceeds the total number of domains");
 
         uint256 count = endIndex - startIndex; // Calculate the number of domain names to be returned.
         domainNames = new string[](count); // Initialize the array to hold the domain names.
 
         for (uint256 i = startIndex; i < endIndex; ++i) {
-            domainNames[i - startIndex] = registeredDomainNames[i]; // Populate the array with domain names.
+            domainNames[i - startIndex] = _registeredDomainNames[i]; // Populate the array with domain names.
         }
 
         return domainNames; // Return the populated array of domain names.
@@ -220,43 +196,71 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
 
     // ============================ Internal Functions ==========================
 
-    // ____________________ Internal Functions: Domain Handling ____________________
+    // ____________________ Internal Functions: Pure and View Functions ____________________
+
     /**
-     * @notice Validates a domain based on basic RFC 1035 rules using inline assembly for character iteration and checks.
+     * @notice Validates a domain based on basic RFC 1035 rules using inline assembly
+     * for character iteration and checks.
      * @dev This is a basic check. Some other rules from RFC 1035 may not be enforced.
      * @param domainName The domain name to validate.
      * @return Whether the domain is valid.
      */
-    function isValidDomain(string memory domainName) internal pure returns (bool) {
+    function _isValidDomainStartAndLength(string memory domainName) internal pure returns (bool) {
         bytes memory domainBytes = bytes(domainName);
         uint256 len = domainBytes.length;
 
-        // Check the domain length to ensure it falls within the allowed range
+        // Проверка длины домена на соответствие допустимому диапазону
         if (len < 1 || len > 63) {
             return false;
         }
 
         bool isValid = true;
-        uint8 hyphenCount = 0;
-
         assembly {
-            let dataStart := add(domainBytes, 0x20) // Start of the domain data
-            let dataEnd := add(dataStart, len) // End of the domain data
+            let dataStart := add(domainBytes, 0x20) // Начало данных домена
+            let dataEnd := add(dataStart, len) // Конец данных домена
 
-            // Check if the domain starts or ends with a hyphen ('-')
+            // Проверка, начинается ли или заканчивается ли домен дефисом
             if or(eq(byte(0, mload(dataStart)), 0x2D), eq(byte(0, mload(sub(dataEnd, 1))), 0x2D)) {
                 isValid := 0
             }
+        }
+        return isValid;
+    }
 
-            let prevChar := 0x00 // Previous character, used for checking consecutive characters
+    /**
+     * @notice Validates a domain based on basic RFC 1035 rules using inline assembly
+     * for character iteration and checks.
+     * @dev This is a basic check. Some other rules from RFC 1035 may not be enforced.
+     * @param domainName The domain name to validate.
+     * @return Whether the domain is valid.
+     */
+
+    function _isValidDomainCharacters(string memory domainName) internal pure returns (bool) {
+        bytes memory domainBytes = bytes(domainName);
+        uint256 len = domainBytes.length;
+
+        bool isValid = true;
+        uint8 hyphenCount = 0;
+        bytes1 prevChar = 0x00;
+
+        assembly {
+            let dataStart := add(domainBytes, 0x20)
+            let dataEnd := add(dataStart, len)
 
             for {
 
             } and(isValid, lt(dataStart, dataEnd)) {
-                // Loop through each character
                 dataStart := add(dataStart, 1)
             } {
-                let char := byte(0, mload(dataStart)) // Current character
+                let char := byte(0, mload(dataStart))
+
+                // Check for consecutive invalid characters like ".." or "--"
+                if and(eq(char, prevChar), or(eq(char, 0x2D), eq(char, 0x2E))) {
+                    isValid := 0
+                }
+
+                // Update prevChar to the current character for the next loop iteration
+                prevChar := char
 
                 // Increment hyphen count if a hyphen is found
                 if eq(char, 0x2D) {
@@ -305,12 +309,12 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * @param domainName The complete domain name string to be parsed and split.
      * @return parts An array containing individual parts of the domain name split by dots.
      */
-    function splitDomain(string memory domainName) internal pure returns (string[] memory) {
-        uint length = bytes(domainName).length;
-        uint count = 1; // At least one domain part
+    function _splitDomain(string memory domainName) internal pure returns (string[] memory) {
+        uint256 length = bytes(domainName).length;
+        uint256 count = 1; // At least one domain part
 
         // First pass: count dots
-        for (uint i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i++) {
             bytes1 char;
             assembly {
                 char := mload(add(add(domainName, 0x20), i))
@@ -321,19 +325,19 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
         }
 
         string[] memory parts = new string[](count);
-        uint startIndex = 0;
-        uint arrayIndex = 0;
+        uint256 startIndex = 0;
+        uint256 arrayIndex = 0;
 
         // Second pass: extract parts
-        for (uint i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i++) {
             bytes1 char;
             assembly {
                 char := mload(add(add(domainName, 0x20), i))
             }
             if (char == "." || i == length - 1) {
-                uint endIndex = char == "." ? i : i + 1;
+                uint256 endIndex = char == "." ? i : i + 1;
                 bytes memory part = new bytes(endIndex - startIndex);
-                for (uint j = 0; j < part.length; j++) {
+                for (uint256 j = 0; j < part.length; j++) {
                     assembly {
                         mstore(add(add(part, 0x20), j), mload(add(add(domainName, 0x20), add(startIndex, j))))
                     }
@@ -355,15 +359,15 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * @param domainName The domain name for which the parent domain is to be retrieved.
      * @return The parent domain name.
      */
-    function parentDomainName(string memory domainName) internal pure returns (string memory) {
+    function _parentDomainName(string memory domainName) internal pure returns (string memory) {
         // Split the domain name into its constituent parts
-        string[] memory parts = splitDomain(domainName);
+        string[] memory parts = _splitDomain(domainName);
         // Initialize the result as an empty string
         string memory result = "";
         // Check if the domain has multiple parts
         if (parts.length > 1) {
             // Iterate through each part of the domain name
-            for (uint i = 1; i < parts.length; i++) {
+            for (uint256 i = 1; i < parts.length; i++) {
                 // If it's not the first part, append a dot to separate parts
                 if (i != 1) {
                     result = string(abi.encodePacked(result, "."));
@@ -376,15 +380,16 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
         return result;
     }
 
-    // ____________________ Internal Functions: Utility ____________________
+    // ____________________ Internal Functions: Utility Functions ____________________
     /**
-     * @notice Efficiently slices a bytes array from the given start position for the specified length using inline assembly.
+     * @notice Efficiently slices a bytes array from the given start position
+     * for the specified length using inline assembly.
      * @param data The original bytes array.
      * @param start The starting position for the slice.
      * @param len The length of the slice.
      * @return The resulting bytes array slice.
      */
-    function slice(bytes memory data, uint start, uint len) internal pure returns (bytes memory) {
+    function _slice(bytes memory data, uint256 start, uint256 len) internal pure returns (bytes memory) {
         bytes memory result = new bytes(len);
 
         assembly {
@@ -406,5 +411,74 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
         }
 
         return result;
+    }
+
+    // ____________________ Internal Functions: Domain Handling ____________________
+
+    function _validateDomain(string memory domainName) private {
+        // Проверка, является ли вызывающий контрактом
+        uint256 size;
+        address sender = msg.sender;
+        assembly {
+            size := extcodesize(sender)
+        }
+        if (size > 0) {
+            revert ContractsCannotRegisterDomains("Contracts cannot register domains");
+        }
+
+        // Проверка валидности домена
+        if (!_isValidDomainStartAndLength(domainName)) {
+            revert InvalidDomainFormat("Invalid domain format");
+        }
+        if (!_isValidDomainCharacters(domainName)) {
+            revert InvalidDomainFormat("Invalid domain format");
+        }
+        if (_domains[domainName] != address(0)) {
+            revert DomainAlreadyRegistered("Domain is already registered");
+        }
+        if (msg.value < registrationFee) {
+            revert IncorrectRegistrationFee("Incorrect registration fee");
+        }
+    }
+
+    function _performRegistration(string memory domainName) private {
+        address payable ownerAddress = payable(msg.sender);
+        _domains[domainName] = ownerAddress;
+        _registeredDomainNames.push(domainName);
+        totalDomainsRegisteredNumber++;
+        emit DomainRegistered(domainName, ownerAddress);
+    }
+
+    function _handlePayments(string memory domainName) private {
+        uint256 domainLevel = _splitDomain(domainName).length;
+        address payable parentDomainOwner = payable(address(0));
+        uint256 parentPayment;
+        uint256 ownerPayment;
+
+        if (domainLevel == 1) {
+            // Если это TLD, весь платёж идёт владельцу контракта
+            ownerPayment = msg.value;
+        } else {
+            // Для поддоменов распределение платежей
+            string memory parentDomain = _parentDomainName(domainName);
+            parentDomainOwner = payable(_domains[parentDomain]);
+            if (parentDomainOwner == address(0)) {
+                revert InvalidDomainFormat("Parent domain not registered");
+            }
+            parentPayment = (msg.value * _DOMAIN_OWNER_PERCENTAGE) / 100;
+            ownerPayment = msg.value - parentPayment;
+
+            // Отправка платежа владельцу родительского домена
+            (bool parentSent, ) = parentDomainOwner.call{value: parentPayment}("");
+            if (!parentSent) {
+                revert TransferToParentDomainOwnerFailed("Failed to send Ether to parent domain owner");
+            }
+        }
+
+        // Отправка платежа владельцу контракта
+        (bool ownerSent, ) = contractOwner.call{value: ownerPayment}("");
+        if (!ownerSent) {
+            revert TransferToOwnerFailed("Failed to send Ether to contract owner");
+        }
     }
 }

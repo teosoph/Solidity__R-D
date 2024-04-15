@@ -17,10 +17,8 @@
     "hardhat:deploy:sepolia-2": "MNEMONIC=$(security find-generic-password -w -s 'Seed Phrase (for Testnets)') INFURA_API_KEY=$(security find-generic-password -w -s 'Infura API key (Solidity Courses)') hardhat run scripts/deployLock.js --network sepolia",
     "hardhat:verify:sepolia-1": "hardhat verify --network sepolia <Contract_Address> <Constructor_Arguments>",
     "hardhat:verify:sepolia-2": "ETHERSCAN_API_KEY=$(security find-generic-password -w -s 'Etherscan API Key') INFURA_API_KEY=$(security find-generic-password -w -s 'Infura API key (Solidity Courses)') hardhat verify --network sepolia 0x4ca86c08a287f1e268e50b927176badb178de1ed 0x0000000000000000000000000000000000000000000000000000000064d2530c",
-   
     "ingnition:deploy:V1:localhost": "npx hardhat ignition deploy ignition/modules/V1.js --network localhost",
     "ingnition:deploy:V2:localhost": "npx hardhat ignition deploy ignition/modules/V2.js --network localhost",
-   
     "remixd": "npx remixd -s $(pwd) --remix-ide https://remix.ethereum.org"
   },
   "keywords": [],
@@ -29,8 +27,8 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "hardhat": "^2.22.2",
-       "hardhat-gas-reporter": "^1.0.9",
-    "solhint": "^3.3.7",
+    "hardhat-gas-reporter": "^1.0.9",
+    "solhint": "^3.6.2",
     "solhint-plugin-prettier": "^0.0.5",
     "ts-node": "^10.7.0",
     "typechain": "^5.2.0",
@@ -38,10 +36,9 @@
   },
   "dependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.1",
+    "@openzeppelin/contracts": "^5.0.2",
     "@openzeppelin/contracts-upgradeable": "^5.0.2",
     "@openzeppelin/hardhat-upgrades": "^3.0.5",
     "dotenv": "^16.4.5"
   }
 }
-
-
