@@ -45,13 +45,36 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
  */
 
 contract DomainRegistryV1 is Initializable, OwnableUpgradeable {
+    /// @custom:storage-location erc7201:domainRegistry.storage
+    struct DomainRegistryStorage {
+        address contractOwner; /// @notice Owner of the contract
+        uint256 registrationFee; /// @notice Registration fee required to register a domain
+        uint256 totalDomainsRegisteredNumber; /// @notice Total number of domains registered in the contract
+        string[] registeredDomainNames; /// @dev Array to store the names of all registered domains
+        mapping(string => address) domains; ///     @dev Maps domain names to the addresses of their respective owners.
+    }
+
+    //Determine the storage slot where this struct will reside using a hash function, as per ERC-7201.
+    // This involves computing a keccak256 hash of a unique identifier.
+    // bytes32 private constant DomainRegistryStorageLocation =
+    //     keccak256(abi.encode(uint256(keccak256("domainRegistry.storage")) - 1)) & ~bytes32(uint256(0xff));
+
+    bytes32 private constant DomainRegistryStorageLocation =
+        0x2fa08a24d651f334e38f76d054b804fee9ea2ce22fe228c9362cfd32ab661e00;
+
+    //This function will utilize inline assembly to directly access the storage slot.
+    function _domainRegistryStorage() private pure returns (DomainRegistryStorage storage ds) {
+        assembly {
+            ds.slot := DomainRegistryStorageLocation
+        }
+    }
+
     // ____________________ Constants ____________________
     uint256 public constant MAX_REGISTRATION_FEE = 1 ether; // Maximum value example
     uint8 constant MIN_DOMAIN_LENGTH = 1; // Minimum length of a domain name.
     uint8 constant MAX_DOMAIN_LENGTH = 63; // Maximum length of a domain name.
 
     // ____________________ Custom Errors ____________________
-    // error OnlyOwnerAllowed(string message);
     error IncorrectRegistrationFee(string message);
     error InvalidDomainFormat(string message);
     error DomainAlreadyRegistered(string message);
@@ -61,25 +84,6 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable {
     error StartIndexMustBeLessThanEndIndex(string message);
     error EndIndexExceedsTotalDomains(string message);
     error NewOwnerIsZeroAddress(string message);
-
-    // ____________________ State variables ____________________
-    /// @notice Owner of the contract
-    address public contractOwner;
-
-    /// @notice Registration fee required to register a domain
-    uint256 public registrationFee;
-
-    /// @notice Total number of domains registered in the contract
-    uint256 public totalDomainsRegisteredNumber;
-
-    /// @dev Array to store the names of all registered domains
-    string[] private registeredDomainNames;
-
-    // ____________________ Data mappings ____________________
-    /**
-     * @dev Maps domain names to the addresses of their respective owners.
-     */
-    mapping(string => address) private domains;
 
     // ____________________ Events ____________________
     /**
@@ -102,8 +106,13 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable {
      * and initializes the registration fee to 0.01 ether.
      */
     function initialize() public initializer {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        ds.contractOwner = msg.sender;
+
+        ds.registrationFee = 0.01 ether;
+
         __Ownable_init(msg.sender);
-        registrationFee = 0.01 ether;
     }
 
     // ____________________ Functions ____________________
@@ -116,17 +125,19 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable {
      * @param domainName The domain name to register.
      */
     function registerDomain(string memory domainName) external payable {
-        if (msg.value != registrationFee) revert IncorrectRegistrationFee("Incorrect registration fee");
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        if (msg.value != ds.registrationFee) revert IncorrectRegistrationFee("Incorrect registration fee");
         if (!isValidTopLevelDomain(domainName)) revert InvalidDomainFormat("Invalid domain format");
-        if (domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
+        if (ds.domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
 
         // Update the contract state
-        domains[domainName] = msg.sender;
-        registeredDomainNames.push(domainName);
-        totalDomainsRegisteredNumber++;
+        ds.domains[domainName] = msg.sender;
+        ds.registeredDomainNames.push(domainName);
+        ds.totalDomainsRegisteredNumber++;
 
         // Transfer the registration fee to the owner immediately upon receiving it.
-        (bool success, ) = contractOwner.call{value: msg.value}("");
+        (bool success, ) = ds.contractOwner.call{value: msg.value}("");
         if (!success) revert TransferFailed("Transfer failed");
 
         // Generate an event after all changes and successful transfer of funds
@@ -146,10 +157,12 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable {
      * @param newFee The new registration fee in Wei. Must be non-negative and not exceed the maximum allowed fee.
      */
     function updateRegistrationFee(uint256 newFee) external onlyOwner {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
         if (newFee <= 0) revert FeeCannotBeNegativeOrZero("Fee cannot be negative or zero");
         if (newFee > MAX_REGISTRATION_FEE) revert FeeExceedsMaximumAllowed("Fee exceeds the maximum allowed limit");
 
-        registrationFee = newFee;
+        ds.registrationFee = newFee;
         emit FeeUpdated(newFee);
     }
 
@@ -160,7 +173,9 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable {
      * @return The address of the domain owner.
      */
     function getDomainOwner(string memory domainName) public view returns (address) {
-        return domains[domainName];
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        return ds.domains[domainName];
     }
 
     /**
@@ -175,16 +190,18 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable {
         uint256 startIndex,
         uint256 endIndex
     ) public view returns (string[] memory domainNames) {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
         if (startIndex >= endIndex)
             revert StartIndexMustBeLessThanEndIndex("Start index must be less than the end index");
-        if (endIndex > registeredDomainNames.length)
+        if (endIndex > ds.registeredDomainNames.length)
             revert EndIndexExceedsTotalDomains("End index exceeds the total number of domains");
 
         uint256 count = endIndex - startIndex; // Calculate the number of domain names to be returned.
         domainNames = new string[](count); // Initialize the array to hold the domain names.
 
         for (uint256 i = startIndex; i < endIndex; ++i) {
-            domainNames[i - startIndex] = registeredDomainNames[i]; // Populate the array with domain names.
+            domainNames[i - startIndex] = ds.registeredDomainNames[i]; // Populate the array with domain names.
         }
 
         return domainNames; // Return the populated array of domain names.

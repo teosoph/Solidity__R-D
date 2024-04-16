@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 import "@openzeppelin/contracts/utils/Address.sol";
@@ -48,15 +48,38 @@ import "@openzeppelin/contracts/utils/Address.sol";
  */
 
 contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
+    /// @custom:storage-location erc7201:domainRegistry.storage
+
+    struct DomainRegistryStorage {
+        address contractOwner; /// @notice Owner of the contract
+        uint256 registrationFee; /// @notice Registration fee required to register a domain
+        uint256 totalDomainsRegisteredNumber; /// @notice Total number of domains registered in the contract
+        string[] registeredDomainNames; /// @dev Array to store the names of all registered domains
+        mapping(string => address) domains; ///     @dev Maps domain names to the addresses of their respective owners.
+    }
+
+    bytes32 private constant DomainRegistryStorageLocation =
+        0x2fa08a24d651f334e38f76d054b804fee9ea2ce22fe228c9362cfd32ab661e00;
+
+    function _domainRegistryStorage() private pure returns (DomainRegistryStorage storage ds) {
+        assembly {
+            ds.slot := DomainRegistryStorageLocation
+        }
+    }
+
     // ____________________ Constants ____________________
     /// @dev Maximum registration fee allowed.
     uint256 public constant MAX_REGISTRATION_FEE = 1 ether;
 
+    uint8 constant MIN_DOMAIN_LENGTH = 1; // Minimum length of a domain name.
+    uint8 constant MAX_DOMAIN_LENGTH = 63; // Maximum length of a domain name.
+
+    uint256 private constant BASIS_POINTS = 10000;
+
     /// @dev Percentage of registration fee to be given to domain owner.
-    uint256 private constant DOMAIN_OWNER_PERCENTAGE = 20;
+    uint256 private constant DOMAIN_OWNER_PERCENTAGE_BP = 2000;
 
     // ____________________ Custom Errors ____________________
-    // error OnlyOwnerAllowed(string message);
     error IncorrectRegistrationFee(string message);
     error InvalidDomainFormat(string message);
     error DomainAlreadyRegistered(string message);
@@ -67,23 +90,6 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
     error EndIndexExceedsTotalDomains(string message);
     error NewOwnerIsZeroAddress(string message);
     error NoFundsForWithdrawal(string message);
-
-    // ____________________ State variables ____________________
-    /// @notice Owner of the contract
-    address public contractOwner;
-
-    /// @notice Registration fee required to register a domain
-    uint256 public registrationFee;
-
-    /// @notice Total number of domains registered in the contract
-    uint256 public totalDomainsRegisteredNumber;
-
-    /// @dev Array to store the names of all registered domains
-    string[] private registeredDomainNames;
-
-    // ____________________ Data mappings ____________________
-    /// @dev Maps domain names to the addresses of their respective owners.
-    mapping(string => address) private domains;
 
     // ____________________ Events ____________________
     /**
@@ -99,18 +105,6 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      */
     event FeeUpdated(uint256 newFee);
 
-    // ____________________ Initializer ____________________
-    /**
-     * @dev Initializes the contract setting the deployer as the initial owner.
-     * This initializer sets up the Ownable contract with the deployer's address
-     * and initializes the registration fee to 0.01 ether.
-     */
-
-    function initializeV2() public initializer {
-        __Ownable_init(msg.sender);
-        registrationFee = 0.01 ether;
-    }
-
     // ========================== Functions ==========================
 
     // ____________________ Core Business Logic Functions ____________________
@@ -121,9 +115,11 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * @param domainName The domain name to register.
      */
     function registerDomain(string memory domainName) external payable {
-        if (!isValidDomain(domainName)) revert InvalidDomainFormat("Invalid domain format");
-        if (domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
-        if (msg.value < registrationFee) revert IncorrectRegistrationFee("Incorrect registration fee");
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        if (!isValidTopLevelDomain(domainName)) revert InvalidDomainFormat("Invalid domain format");
+        if (ds.domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
+        if (msg.value < ds.registrationFee) revert IncorrectRegistrationFee("Incorrect registration fee");
 
         string[] memory parts = splitDomain(domainName);
         uint256 domainLevel = parts.length;
@@ -131,22 +127,22 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
         address payable parentDomainOwner = payable(address(0));
 
         // Регистрация домена и обновление состояния контракта
-        domains[domainName] = ownerAddress;
-        registeredDomainNames.push(domainName);
-        totalDomainsRegisteredNumber++;
+        ds.domains[domainName] = ownerAddress;
+        ds.registeredDomainNames.push(domainName);
+        ds.totalDomainsRegisteredNumber++;
 
         if (domainLevel == 1) {
             // Для домена первого уровня весь платеж переводится владельцу контракта
-            (bool sent, ) = contractOwner.call{value: msg.value}("");
+            (bool sent, ) = ds.contractOwner.call{value: msg.value}("");
             require(sent, "Failed to send Ether");
         } else {
             // Для доменов второго уровня и выше определяем владельца родительского домена
             string memory parentDomain = parentDomainName(domainName);
-            parentDomainOwner = payable(domains[parentDomain]);
+            parentDomainOwner = payable(ds.domains[parentDomain]);
             if (parentDomainOwner == address(0)) revert InvalidDomainFormat("Parent domain not registered");
 
             // Расчет и перевод средств
-            uint256 parentPayment = (msg.value * DOMAIN_OWNER_PERCENTAGE) / 100;
+            uint256 parentPayment = (msg.value * DOMAIN_OWNER_PERCENTAGE_BP) / BASIS_POINTS;
             uint256 ownerPayment = msg.value - parentPayment;
 
             // 20% владельцу родительского домена
@@ -154,7 +150,7 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
             require(parentSent, "Failed to send Ether to parent domain owner");
 
             // 80% владельцу контракта
-            (bool ownerSent, ) = contractOwner.call{value: ownerPayment}("");
+            (bool ownerSent, ) = ds.contractOwner.call{value: ownerPayment}("");
             require(ownerSent, "Failed to send Ether to contract owner");
         }
         // Генерация события после успешной регистрации домена
@@ -174,10 +170,12 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * @param newFee The new registration fee in Wei. Must be non-negative and not exceed the maximum allowed fee.
      */
     function updateRegistrationFee(uint256 newFee) external onlyOwner {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
         if (newFee <= 0) revert FeeCannotBeNegativeOrZero("Fee cannot be negative or zero");
         if (newFee > MAX_REGISTRATION_FEE) revert FeeExceedsMaximumAllowed("Fee exceeds the maximum allowed limit");
 
-        registrationFee = newFee;
+        ds.registrationFee = newFee;
         emit FeeUpdated(newFee);
     }
 
@@ -188,7 +186,9 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * @return The address of the domain owner.
      */
     function getDomainOwner(string memory domainName) public view returns (address) {
-        return domains[domainName];
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        return ds.domains[domainName];
     }
 
     /**
@@ -203,16 +203,18 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
         uint256 startIndex,
         uint256 endIndex
     ) public view returns (string[] memory domainNames) {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
         if (startIndex >= endIndex)
             revert StartIndexMustBeLessThanEndIndex("Start index must be less than the end index");
-        if (endIndex > registeredDomainNames.length)
+        if (endIndex > ds.registeredDomainNames.length)
             revert EndIndexExceedsTotalDomains("End index exceeds the total number of domains");
 
         uint256 count = endIndex - startIndex; // Calculate the number of domain names to be returned.
         domainNames = new string[](count); // Initialize the array to hold the domain names.
 
         for (uint256 i = startIndex; i < endIndex; ++i) {
-            domainNames[i - startIndex] = registeredDomainNames[i]; // Populate the array with domain names.
+            domainNames[i - startIndex] = ds.registeredDomainNames[i]; // Populate the array with domain names.
         }
 
         return domainNames; // Return the populated array of domain names.
@@ -227,12 +229,12 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
      * @param domainName The domain name to validate.
      * @return Whether the domain is valid.
      */
-    function isValidDomain(string memory domainName) internal pure returns (bool) {
+    function isValidTopLevelDomain(string memory domainName) internal pure returns (bool) {
         bytes memory domainBytes = bytes(domainName);
-        uint256 len = domainBytes.length;
+        uint256 domainLength = domainBytes.length;
 
         // Check the domain length to ensure it falls within the allowed range
-        if (len < 1 || len > 63) {
+        if (domainLength < MIN_DOMAIN_LENGTH || domainLength > MAX_DOMAIN_LENGTH) {
             return false;
         }
 
@@ -241,7 +243,7 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable {
 
         assembly {
             let dataStart := add(domainBytes, 0x20) // Start of the domain data
-            let dataEnd := add(dataStart, len) // End of the domain data
+            let dataEnd := add(dataStart, domainLength) // End of the domain data
 
             // Check if the domain starts or ends with a hyphen ('-')
             if or(eq(byte(0, mload(dataStart)), 0x2D), eq(byte(0, mload(sub(dataEnd, 1))), 0x2D)) {

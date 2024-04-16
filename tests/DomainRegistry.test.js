@@ -69,9 +69,9 @@ describe("Domain Registry Upgrade", function () {
 
             console.log(`User ${user1.address} registered domain '${domainName}' in V1\n`);
 
-            console.log("Original V1 proxy address:", domainRegistry.target);
+            console.log("Original V1 proxy address:", domainRegistry.address);
             const v2 = await upgrades.upgradeProxy(domainRegistry.target, V2);
-            console.log("Upgraded to V2 at:", v2.target, "\n");
+            console.log("Upgraded to V2 at:", v2.address, "\n");
 
             expect(await v2.getDomainOwner(domainName)).to.equal(user1.address);
             console.log(`Ownership of domain '${domainName}' confirmed in V2`);
@@ -82,7 +82,7 @@ describe("Domain Registry Upgrade", function () {
                 .withArgs(newRegistrationFee.toString());
 
             const updatedFee = await v2.registrationFee();
-            console.log(`Registration fee updated in V2 to: ${ethers.formatEther(updatedFee)} ETH`);
+            console.log(`Registration fee updated in V2 to: ${ethers.utils.formatEther(updatedFee)} ETH`);
             expect(updatedFee).to.equal(newRegistrationFee);
         });
     });
@@ -102,15 +102,16 @@ describe("Domain Registry Upgrade", function () {
                 .to.emit(v2, "FeeUpdated")
                 .withArgs(newRegistrationFee.toString());
         });
+
         it("2.2: should revert fee update attempts by non-owner accounts in V2", async function () {
             const newFee = ethers.parseEther("0.02");
             console.log(`Attempting to update fee by user: ${user2.address}`);
             const currentOwner = await v2.owner();
             console.log(`Expected owner: ${currentOwner}`);
 
-            // Используем более общую форму проверки на откат без указания конкретной ошибки
-            await expect(v2.connect(user2).updateRegistrationFee(newFee)).to.be.revertedWith(
-                "Ownable: caller is not the owner",
+            await expect(v2.connect(user2).updateRegistrationFee(newFee)).to.be.revertedWithCustomError(
+                v2,
+                "OwnableUnauthorizedAccount",
             );
         });
 

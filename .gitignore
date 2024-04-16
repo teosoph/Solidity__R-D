@@ -157,3 +157,7 @@ ignition/deployments/
 ignition/modules/V2 copy.js
 ignition/modules/V1 copy.js
 libraries/
+.solhint copy.json
+.DS_Store
+helpers/tokens/StorageLocationToken.json
+.solhint.json
