@@ -159,3 +159,4 @@ ignition/modules/V1 copy.js
 libraries/
 .solhint copy.json
 .DS_Store
+helpers/tokens/StorageLocationToken.json
