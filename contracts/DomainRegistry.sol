@@ -1,93 +1,86 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.24;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-import {IDomainRegistry} from "./IDomainRegistry.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 /**
  * @title Domain Registry
- * @dev A smart contract for managing domain registration on the Ethereum blockchain.
- * This contract allows users to register domain names, supporting a flexible and
- * upgradeable domain management system. With an emphasis on security and
- * user-friendly operations, it introduces a structured approach to domain ownership,
- * transfers, and registration fee management.
+ * @notice Allows users to register and manage domains with fees and ownership details
+ * @dev Uses OpenZeppelin's upgradeable contracts for flexible domain registration on Ethereum.
+ * Supports various domain levels, providing a system similar to traditional DNS services.
+ * It allows for dynamic adjustment of registration fees and robust validation of domain names,
+ * ensuring transparency and security in domain management.
  *
  * Key Features and Functions:
- *
  * 1. Flexible Domain Registration:
- *    - Support for registering various levels of domain names, mirroring traditional
- *      DNS service structure.
- *    - Registration requires payment of a fee, adjustable by the contract owner to
- *      accommodate market conditions or strategic pricing adjustments.
+ *    - Supports multiple levels of domain names, similar to DNS.
+ *    - Requires a fee for registration, adjustable by the contract owner.
  *
  * 2. Transparent Domain Ownership:
- *    - Provides clear ownership records for each registered domain, accessible
- *      through the `getDomainOwner` function.
- *    - Ensures easy management and verification of domain ownership, crucial for
- *      operational transparency and security.
+ *    - Provides clear records of domain ownership accessible via `getDomainOwner`.
+ *    - Simplifies management and verification of domain ownership.
  *
  * 3. Adjustable Registration Fees:
- *    - Allows the contract owner to dynamically adjust domain registration fees with
- *      `updateRegistrationFee`, ensuring flexibility in pricing strategy.
+ *    - Contract owner can dynamically adjust fees with `updateRegistrationFee`.
  *
  * 4. Robust Domain Validation:
- *    - Incorporates domain validation logic to ensure that all registered domains
- *      adhere to predefined naming standards, enhancing the integrity of the domain
- *      registry.
+ *    - Validates domains to adhere to set standards, ensuring registry integrity.
  *
  * 5. Enhanced Security Measures:
- *    - Leverages OpenZeppelin's upgradeable contracts framework to ensure ongoing
- *      contract security and adaptability.
- *    - Employs the `onlyOwner` modifier for critical functions, safeguarding against
- *      unauthorized access and potential vulnerabilities.
+ *    - Incorporates upgradeable contract framework for security and adaptability.
+ *    - Uses `onlyOwner` modifier to protect critical functions from unauthorized access.
  *
  * 6. Event-Driven Notifications:
- *    - Utilizes events for notifying stakeholders of key activities such as domain
- *      registrations and fee updates, fostering an environment of transparency.
+ *    - Emits events for domain registrations and fee updates, enhancing transparency.
  *
  * Security Considerations:
- *   - Adopts industry-standard practices and patterns to mitigate common security
- *     risks, including reentrancy attacks and unauthorized access.
- *   - Regular audits and community feedback are encouraged to identify and address
- *     potential security issues promptly.
+ *   - Implements standard security practices to mitigate risks like reentrancy and unauthorized access.
+ *   - Encourages regular audits and community feedback to address security issues.
  *
  * Future Directions:
- *   - Plans for introducing features such as domain transfers, subdomain registration,
- *     and more sophisticated access control mechanisms.
- *   - Open to community suggestions and contributions to drive continuous improvement
- *     and innovation in domain management on the blockchain.
+ *   - Plans to introduce domain transfers, subdomain registrations, and enhanced access controls.
+ *   - Open to community suggestions for continuous improvement and innovation.
  *
  * Note:
- *   - This contract represents an initial iteration towards a decentralized domain
- *     registration system. Future versions may introduce additional features and
- *     optimizations based on user feedback and technological advancements.
+ *   - Represents an initial step towards a decentralized domain registration system.
+ *   - Future versions may include more features and optimizations based on user feedback.
  */
 
-contract DomainRegistryV1 is Initializable, OwnableUpgradeable, IDomainRegistry {
+contract DomainRegistryV1 is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+    // ____________________ Struct ____________________
+    /// @notice Holds domain registration details and owner information
+    /// @custom:storage-location erc7201:domainRegistry.storage
+    struct DomainRegistryStorage {
+        address contractOwner; /// @notice Owner of the contract
+        uint256 registrationFee; /// @notice Registration fee required to register a domain
+        uint256 totalDomainsRegisteredNumber; /// @notice Total number of domains registered in the contract
+        string[] registeredDomainNames; /// @dev Array to store the names of all registered domains
+        mapping(string => address) domains; /// @dev Maps domain names to the addresses of their respective owners.
+    }
+
     // ____________________ Constants ____________________
-    uint256 public constant MAX_REGISTRATION_FEE = 1 ether; // Maximum value example
-    uint8 internal constant _MIN_DOMAIN_LENGTH = 1; // Minimum length of a domain name.
-    uint8 internal constant _MAX_DOMAIN_LENGTH = 63; // Maximum length of a domain name.
-
-    // ____________________ State variables ____________________
-    /// @notice Owner of the contract
-    address public contractOwner;
-
-    /// @notice Registration fee required to register a domain
-    uint256 public registrationFee;
-
-    /// @notice Total number of domains registered in the contract
-    uint256 public totalDomainsRegisteredNumber;
-
-    /// @dev Array to store the names of all registered domains
-    string[] private _registeredDomainNames;
-
-    // ____________________ Data mappings ____________________
     /**
-     * @dev Maps domain names to the addresses of their respective owners.
+     * @notice Constant used to determine the storage slot of the DomainRegistryStorage structure
+     * @dev This storage slot is calculated using a hash function, designed in compliance
+     * with EIP-1967 for upgradeable contract storage patterns.
+     * The specific hash function used here involves keccak256, adjusted to ensure
+     * the storage slot does not overlap with Ethereum's predefined storage areas.
+     * This makes it suitable for use with upgradeable smart contracts where storage layout
+     * must be strictly controlled to prevent clashes and ensure proxy compatibility.
      */
-    mapping(string domainName => address domainOwner) private _domains;
+    bytes32 private constant _DOMAIN_REGISTRY_STORAGE_LOCATION =
+        0x2fa08a24d651f334e38f76d054b804fee9ea2ce22fe228c9362cfd32ab661e00;
+
+    /// @notice Maximum fee that can be set for domain registration
+    uint256 public constant MAX_REGISTRATION_FEE = 1 ether;
+
+    /// @notice Minimum length for a valid domain name
+    uint8 internal constant _MIN_DOMAIN_LENGTH = 1;
+
+    /// @notice Maximum length for a valid domain name
+    uint8 internal constant _MAX_DOMAIN_LENGTH = 63;
 
     // ____________________ Events ____________________
     /**
@@ -115,64 +108,66 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable, IDomainRegistry 
     error NewOwnerIsZeroAddress(string message);
 
     // ____________________ Initializer ____________________
-    /**
-     * @dev Initializes the contract setting the deployer as the initial owner.
-     * This initializer sets up the Ownable contract with the deployer's address
-     * and initializes the registration fee to 0.01 ether.
-     */
-    function initialize() public override initializer {
+    /// @notice Initializes the contract with the deployer as the owner and sets the initial registration fee
+    /// @dev Sets the initial owner to the deployer's address and the initial registration fee to 0.01 ether
+    function initialize() public initializer {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+        ds.contractOwner = msg.sender;
+        ds.registrationFee = 0.01 ether;
         __Ownable_init(msg.sender);
-        registrationFee = 0.01 ether;
+        __ReentrancyGuard_init();
     }
 
-    // ____________________ Functions ____________________
+    // ============================= Functions ===============================
     // ____________________ Core Business Logic Functions ____________________
     /**
-     * @notice Registers a new domain.
-     * @dev Registers a domain if it is valid and not already registered. Charges a fee and transfers it to the owner.
-     * The time of registration can be inferred from the block timestamp associated with the DomainRegistered event.
-     * This function does not return a value but emits a DomainRegistered event upon successful domain registration.
-     * @param domainName The domain name to register.
+     * @notice Registers a new domain if it is not already taken and is valid according to domain naming rules
+     * @dev Charges the registration fee, transfers it to the contract owner, and assigns the domain to the caller
+     * @param domainName The domain name to register
      */
-    function registerDomain(string memory domainName) external payable override {
-        if (msg.value != registrationFee) revert IncorrectRegistrationFee("Incorrect registration fee");
+    function registerDomain(string memory domainName) external payable nonReentrant {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        // Check conditions
+        if (msg.value != ds.registrationFee) revert IncorrectRegistrationFee("Incorrect registration fee");
         if (!_isValidTopLevelDomain(domainName)) revert InvalidDomainFormat("Invalid domain format");
-        if (_domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
+        if (ds.domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
 
         // Update the contract state
-        _domains[domainName] = msg.sender;
-        _registeredDomainNames.push(domainName);
-        totalDomainsRegisteredNumber++;
+        ds.domains[domainName] = msg.sender;
+        ds.registeredDomainNames.push(domainName);
+        ds.totalDomainsRegisteredNumber++;
+
+        // Generate an event after all changes
+        emit DomainRegistered(domainName, msg.sender);
 
         // Transfer the registration fee to the owner immediately upon receiving it.
-        (bool success, ) = contractOwner.call{value: msg.value}("");
-        if (!success) revert TransferFailed("Transfer failed");
-
-        // Generate an event after all changes and successful transfer of funds
-        emit DomainRegistered(domainName, msg.sender);
+        payable(ds.contractOwner).transfer(msg.value);
     }
 
     // ____________________ Contract Management Functions ____________________
+
     /**
      * @dev Updates the domain registration fee to a new value.
      * This function can only be invoked by the owner of the contract.
      * It allows the owner to adjust the fee required for new domain registrations.
      * The fee must be a non-negative value and
      * should not exceed the maximum allowed limit defined by `MAX_REGISTRATION_FEE`,
-     * ensuring that the fee remains within
-     * reasonable bounds. The updated fee is specified in Wei.
-     * Emits a `FeeUpdated` event upon successful update.
+     * ensuring that the fee remains within reasonable bounds.
+     * The updated fee is specified in Wei. Emits a `FeeUpdated` event upon successful update.
      * Requirements:
      * - The caller must be the contract owner.
      * - `newFee` must be greater than or equal to 0.
      * - `newFee` must not exceed `MAX_REGISTRATION_FEE`.
      * @param newFee The new registration fee in Wei. Must be non-negative and not exceed the maximum allowed fee.
      */
-    function updateRegistrationFee(uint256 newFee) external override onlyOwner {
+    function updateRegistrationFee(uint256 newFee) external onlyOwner {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
         if (newFee <= 0) revert FeeCannotBeNegativeOrZero("Fee cannot be negative or zero");
         if (newFee > MAX_REGISTRATION_FEE) revert FeeExceedsMaximumAllowed("Fee exceeds the maximum allowed limit");
 
-        registrationFee = newFee;
+        ds.registrationFee = newFee;
         emit FeeUpdated(newFee);
     }
 
@@ -182,8 +177,10 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable, IDomainRegistry 
      * @param domainName The name of the domain to query.
      * @return The address of the domain owner.
      */
-    function getDomainOwner(string memory domainName) public view override returns (address) {
-        return _domains[domainName];
+    function getDomainOwner(string memory domainName) public view returns (address) {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        return ds.domains[domainName];
     }
 
     /**
@@ -197,27 +194,32 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable, IDomainRegistry 
     function getDomainNamesByIndex(
         uint256 startIndex,
         uint256 endIndex
-    ) public view override returns (string[] memory domainNames) {
+    ) public view returns (string[] memory domainNames) {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
         if (startIndex >= endIndex)
             revert StartIndexMustBeLessThanEndIndex("Start index must be less than the end index");
-        if (endIndex > _registeredDomainNames.length)
+        if (endIndex > ds.registeredDomainNames.length)
             revert EndIndexExceedsTotalDomains("End index exceeds the total number of domains");
 
         uint256 count = endIndex - startIndex; // Calculate the number of domain names to be returned.
         domainNames = new string[](count); // Initialize the array to hold the domain names.
 
         for (uint256 i = startIndex; i < endIndex; ++i) {
-            domainNames[i - startIndex] = _registeredDomainNames[i]; // Populate the array with domain names.
+            domainNames[i - startIndex] = ds.registeredDomainNames[i]; // Populate the array with domain names.
         }
 
         return domainNames; // Return the populated array of domain names.
     }
 
     // ____________________ Internal Helper Functions ____________________
+
     /**
-     * @dev Validates a domain name to ensure it meets the criteria for a top-level domain.
+     * @notice Validates a domain based on basic RFC 1035 rules using inline assembly for
+     * character iteration and checks.
+     * @dev This is a basic check. Some other rules from RFC 1035 may not be enforced.
      * @param domainName The domain name to validate.
-     * @return True if the domain name is valid, false otherwise.
+     * @return Whether the domain is valid.
      */
     function _isValidTopLevelDomain(string memory domainName) internal pure returns (bool) {
         bytes memory domainBytes = bytes(domainName);
@@ -261,5 +263,18 @@ contract DomainRegistryV1 is Initializable, OwnableUpgradeable, IDomainRegistry 
 
         // If all checks pass, the domain name is considered valid.
         return true;
+    }
+
+    /**
+     * @dev Accesses the storage slot directly using inline assembly.
+     * @return ds The storage pointer to the DomainRegistryStorage structure.
+     * @notice This function uses inline assembly to set the storage slot location,
+     * allowing direct manipulation and retrieval of the contract's state variables
+     * stored in the DomainRegistryStorage structure.
+     */
+    function _domainRegistryStorage() private pure returns (DomainRegistryStorage storage ds) {
+        assembly {
+            ds.slot := _DOMAIN_REGISTRY_STORAGE_LOCATION
+        }
     }
 }

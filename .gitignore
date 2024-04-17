@@ -160,3 +160,4 @@ libraries/
 .solhint copy.json
 .DS_Store
 helpers/tokens/StorageLocationToken.json
+slither.db.json

@@ -81,7 +81,7 @@ describe("Domain Registry Upgrade", function () {
                 .to.emit(v2, "FeeUpdated")
                 .withArgs(newRegistrationFee.toString());
 
-            const updatedFee = await v2.registrationFee();
+            const updatedFee = await v2.getRegistrationFee();
             console.log(`Registration fee updated in V2 to: ${ethers.formatEther(updatedFee)} ETH`);
             expect(updatedFee).to.equal(newRegistrationFee);
         });
@@ -108,10 +108,9 @@ describe("Domain Registry Upgrade", function () {
             const currentOwner = await v2.owner();
             console.log(`Expected owner: ${currentOwner}`);
 
-            // Используем более общую форму проверки на откат без указания конкретной ошибки
-            await expect(v2.connect(user2).updateRegistrationFee(newFee)).to.be.revertedWith(
-                "Ownable: caller is not the owner",
-            );
+            await expect(v2.connect(user2).updateRegistrationFee(newFee))
+                .to.be.revertedWithCustomError(v2, "OwnableUnauthorizedAccount")
+                .withArgs(user2.address);
         });
 
         it("2.3: should handle fee update values correctly in V2", async function () {

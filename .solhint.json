@@ -3,7 +3,6 @@
   "rules": {
     "code-complexity": ["error", 7],
     "explicit-types": ["error"],
-    "function-max-lines": ["error", 45],
     "max-line-length": ["error", 120],
     "max-states-count": ["error", 15],
     "no-console": ["error"],
@@ -15,6 +14,7 @@
     "payable-fallback": ["error"],
     "reason-string": ["error", {"maxLength": 32}],
     "constructor-syntax": ["error"],
+
 
     "const-name-snakecase": ["error"],
     "contract-name-camelcase": ["error"],
@@ -33,7 +33,6 @@
     "visibility-modifier-order": ["error"],
 
 
-    "comprehensive-interface": ["warn"],
     "avoid-call-value": ["error"],
     "avoid-low-level-calls": ["error"],
     "avoid-sha3": ["error"],
@@ -42,7 +41,7 @@
     "avoid-tx-origin": ["error"],
     "check-send-result": ["error"],
     "compiler-version": ["error"],
-    "func-visibility": ["error"],
+        "func-visibility": ["error", {"ignoreConstructors": true}],
     "multiple-sends": ["error"],
     "no-complex-fallback": ["error"],
     "no-inline-assembly": ["off"],

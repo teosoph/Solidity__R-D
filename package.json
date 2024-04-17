@@ -1,6 +1,6 @@
 {
   "name": "DomainRegistry",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "",
   "main": "",
   "scripts": {
@@ -19,14 +19,17 @@
     "hardhat:verify:sepolia-2": "ETHERSCAN_API_KEY=$(security find-generic-password -w -s 'Etherscan API Key') INFURA_API_KEY=$(security find-generic-password -w -s 'Infura API key (Solidity Courses)') hardhat verify --network sepolia 0x4ca86c08a287f1e268e50b927176badb178de1ed 0x0000000000000000000000000000000000000000000000000000000064d2530c",
     "ingnition:deploy:V1:localhost": "npx hardhat ignition deploy ignition/modules/V1.js --network localhost",
     "ingnition:deploy:V2:localhost": "npx hardhat ignition deploy ignition/modules/V2.js --network localhost",
-    "remixd": "npx remixd -s $(pwd) --remix-ide https://remix.ethereum.org"
+    "remixd": "npx remixd -s $(pwd) --remix-ide https://remix.ethereum.org",
+    "gen:token": "npx remixd -s $(pwd) --remix-ide https://remix.ethereum.org",
+    "lint:solhint": "solhint 'contracts/**/*.sol'"
   },
   "keywords": [],
   "author": "Ihor Kyrychenko",
   "license": "MIT",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "hardhat": "^2.22.2",
+    "ethers": "^6.11.1",
+    "hardhat": "^2.22.3",
     "hardhat-gas-reporter": "^1.0.9",
     "solhint": "^3.6.2",
     "solhint-plugin-prettier": "^0.0.5",
