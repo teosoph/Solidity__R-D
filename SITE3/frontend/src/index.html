@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Domain Registry</title>
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/bootstrap@4.4.1/dist/css/bootstrap.min.css"
+            integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
+            crossorigin="anonymous"
+        />
+        <!-- <link rel="stylesheet" src="../../frontend/css/styles.css" /> -->
+
+        <script
+            src="https://code.jquery.com/jquery-3.4.1.slim.min.js"
+            integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"
+            integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://cdn.jsdelivr.net/npm/bootstrap@4.4.1/dist/js/bootstrap.min.js"
+            integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6"
+            crossorigin="anonymous"
+        ></script>
+
+        <script src="https://cdn.jsdelivr.net/npm/web3@1.6.0/dist/web3.min.js"></script>
+
+        <style>
+            body {
+                background-color: #f8f9fa;
+                color: #333;
+            }
+
+            .container {
+                padding-top: 20px;
+            }
+
+            h1 {
+                color: #bf0d0d;
+                margin-bottom: 20px;
+            }
+
+            .form-group {
+                margin-bottom: 15px;
+            }
+
+            label {
+                font-weight: bold;
+            }
+
+            input,
+            select {
+                margin-top: 5px;
+            }
+
+            button {
+                width: 100%;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-top: 10px;
+            }
+
+            span {
+                display: block;
+                margin-top: 10px;
+                padding: 10px;
+                background-color: #e9ecef;
+                border: 1px solid #ced4da;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container-fluid">
+            <div class="row justify-content-center">
+                <div class="container mt-3">
+                    <!-- Register Domain Section -->
+                    <div class="form-group">
+                        <label for="domainName">Domain Name:</label>
+                        <input type="text" id="domainName" class="form-control" />
+                        <button class="btn btn-primary mt-2" id="registerDomainButton">Register Domain</button>
+                    </div>
+
+                    <!-- Payment Token Selector -->
+                    <div class="form-group">
+                        <label for="paymentToken">Payment Method:</label>
+                        <select class="form-control" id="paymentToken">
+                            <option value="ETH">ETH</option>
+                            <option value="USDT">USDT</option>
+                        </select>
+                    </div>
+
+                    <!-- Update Registration Fee -->
+                    <div class="form-group">
+                        <label for="newFee">New Registration Fee:</label>
+                        <input type="number" id="newFee" class="form-control" />
+                        <button class="btn btn-primary mt-2" id="updateFeeButton">Update Fee</button>
+                    </div>
+
+                    <!-- Set USDT Token Address -->
+                    <div class="form-group">
+                        <label for="usdtAddress">New USDT Token Address:</label>
+                        <input type="text" id="usdtAddress" class="form-control" />
+                        <button class="btn btn-primary mt-2" onclick="setUsdtTokenAddress()">Set USDT Address</button>
+                    </div>
+
+                    <!-- Get Latest ETH/USDT Rate -->
+                    <div class="form-group">
+                        <label>ETH/USDT Rate:</label>
+                        <button class="btn btn-secondary" onclick="getLatestRate()">Get Latest Rate</button>
+                        <span id="latestRate"></span>
+                    </div>
+
+                    <!-- Get Domain Owner -->
+                    <div class="form-group">
+                        <label for="domainToCheck">Check Domain Owner:</label>
+                        <input type="text" id="domainToCheck" class="form-control" />
+                        <button class="btn btn-primary mt-2" onclick="getDomainOwner()">Get Owner</button>
+                        <span id="domainOwner"></span>
+                    </div>
+
+                    <!-- Get Domain Names by Index -->
+                    <div class="form-group">
+                        <button class="btn btn-secondary" onclick="getDomainNames()">Get Domain Names</button>
+                        <span id="domainNames"></span>
+                    </div>
+
+                    <!-- Get Registration Fee -->
+                    <div class="form-group">
+                        <button class="btn btn-secondary" id="getRegistrationFeeButton">Get Registration Fee</button>
+                        <span id="registrationFee"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script src="bundle.js"></script>
+    </body>
+</html>

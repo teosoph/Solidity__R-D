@@ -19,8 +19,8 @@ describe("Domain Registry Upgrade", function () {
 
     before(async function () {
         [owner, user1, user2, user3] = await ethers.getSigners();
-        V1 = await ethers.getContractFactory("DomainRegistryV1");
-        V2 = await ethers.getContractFactory("DomainRegistryV2");
+        V1 = await ethers.getContractFactory("DomainRegistryV2");
+        V2 = await ethers.getContractFactory("DomainRegistryV3");
     });
 
     beforeEach(async function () {
@@ -30,7 +30,7 @@ describe("Domain Registry Upgrade", function () {
     });
 
     describe("1. Domain Registration", function () {
-        it("1.1: should allow an owner to register a valid domain", async function () {
+        it("1.1: should allow an owner to register a valid domain in V1", async function () {
             const domainRegistry = await upgrades.deployProxy(V1, [], { initializer: "initialize" });
             for (const domain of validDomains) {
                 await expect(domainRegistry.connect(owner).registerDomain(domain, { value: registrationFee }))
@@ -41,7 +41,7 @@ describe("Domain Registry Upgrade", function () {
             }
         });
 
-        it("1.2: should allow non-owner to register a domain with sufficient fee", async function () {
+        it("1.2: should allow non-owner to register a domain with sufficient fee in V1", async function () {
             const domainRegistry = await upgrades.deployProxy(V1, [], { initializer: "initialize" });
             const domainName = validDomains[0];
             await expect(domainRegistry.connect(user2).registerDomain(domainName, { value: registrationFee }))
@@ -50,7 +50,7 @@ describe("Domain Registry Upgrade", function () {
             console.log(`Non-owner ${user2.address} registered domain '${domainName}'`);
         });
 
-        it("1.3: should not allow domain registration with an invalid domain format", async function () {
+        it("1.3: should not allow domain registration with an invalid domain format in V1", async function () {
             const domainRegistry = await upgrades.deployProxy(V1, [], { initializer: "initialize" });
             for (const domain of invalidDomains) {
                 await expect(

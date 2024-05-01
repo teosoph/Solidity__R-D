@@ -1,15 +1,19 @@
 {
-  "name": "DomainRegistry",
-  "version": "2.1.0",
+  "name": "frontend",
+  "version": "1.0.0",
   "description": "",
-  "main": "",
+  "main": "src/main.js",
+
   "scripts": {
+    "build": "webpack",
+    "start": "webpack && webpack-dev-server",
+
+   
     "node": "hardhat node",
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy.js",
     "hardhat:node": "hardhat node",
     "hardhat:compile": "hardhat compile",
-    "hardhat:accounts": "hardhat accounts",
     "hardhat:compile:force": "hardhat compile --force",
     "hardhat:test": "hardhat test",
     "hardhat:test:gas": "REPORT_GAS=true COINMARKETCAP_API_KEY=$(security find-generic-password -w -s 'Coinmarketcap API Key') hardhat test",
@@ -23,11 +27,15 @@
     "remixd": "npx remixd -s $(pwd) --remix-ide https://remix.ethereum.org",
     "gen:token": "npx remixd -s $(pwd) --remix-ide https://remix.ethereum.org",
     "lint:solhint": "solhint 'contracts/**/*.sol'"
+
   },
   "keywords": [],
-  "author": "Ihor Kyrychenko",
-  "license": "MIT",
-  "devDependencies": {
+  "author": "Andriian Chestnykh",
+  "license": "ISC",
+
+
+   "devDependencies": {
+     "copy-webpack-plugin": "^11.0.0",
     "@babel/core": "^7.24.4",
     "@babel/preset-env": "^7.24.4",
     "@babel/preset-react": "^7.24.1",
@@ -47,6 +55,7 @@
     "webpack-dev-server": "^5.0.4"
   },
   "dependencies": {
+
     "@chainlink/contracts": "^1.0.0",
     "@nomicfoundation/hardhat-ignition": "^0.15.1",
     "@openzeppelin/contracts": "^5.0.2",

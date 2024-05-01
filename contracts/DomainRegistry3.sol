@@ -1,57 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
-/**
- * @title Domain Registry
- * @dev A smart contract for managing the registration and ownership of domains
- * on the Ethereum blockchain. This contract supports a DNS-like structure for
- * domain registration, including both top-level and subdomains, and integrates
- * fee management and transfer capabilities.
- *
- * Key Features and Functions:
- * 1. Domain Registration:
- *    - Support for registering top-level domains (TLDs) and subdomains.
- *    - Domain registration requires a fee, configurable by the contract owner.
- *    - A portion of this fee may be distributed to the parent domain's owner, if applicable.
- *
- * 2. Domain Ownership and Transfer:
- *    - Tracks ownership of domains and enables owners to transfer domains.
- *    - Ownership data is accessible via `getDomainOwner`.
- *
- * 3. Fee Management:
- *    - Allows the owner to adjust the registration fee based on market conditions
- *      or business model changes.
- *    - A percentage of the fee for subdomains is automatically shared with the parent domain's owner.
- *
- * 4. Automatic Fee Distribution:
- *    - Automatically distributes the registration fee upon domain registration.
- *    - For TLDs, the entire fee is transferred to the contract owner.
- *    - For subdomains, a portion of the fee is distributed to the parent domain's owner.
- *
- * 5. Upgradeable Contract Design:
- *    - Implements OpenZeppelin's upgradeable contract framework to allow future updates
- *      without losing existing data or state.
- *
- * 6. Events for Tracking Activities:
- *    - Emits events for domain registrations and fee updates to ensure transparency
- *      and facilitate activity monitoring.
- *
- * Security Considerations:
- *   - Includes safeguards like reentrancy checks during fund transfers.
- *   - Uses OpenZeppelin's `OwnableUpgradeable` for access control, limiting sensitive operations
- *     to the contract owner.
- *
- * Note:
- *   - This upgradeable contract aims to provide a sustainable and adaptable domain registry
- *     system on the Ethereum blockchain.
- *   - Community feedback and contributions are encouraged to enhance functionality and security.
- */
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 
-contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+
+contract DomainRegistryV3 is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     // ____________________ Struct ____________________
     /// @notice Holds domain registration details and owner information
     /// @custom:storage-location erc7201:domainRegistry.storage
@@ -61,7 +19,16 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardU
         uint256 totalDomainsRegisteredNumber; /// @notice Total number of domains registered in the contract
         string[] registeredDomainNames; /// @dev Array to store the names of all registered domains
         mapping(string => address) domains; ///     @dev Maps domain names to the addresses of their respective owners.
+        ERC20Upgradeable usdtToken; /// @dev USDT token adress
     }
+
+    AggregatorV3Interface internal _dataFeed;
+
+    /// @dev  SEPOLIA TEST USDT TOKEN CONTRACT
+    address public usdtTokenAddress = 0x7169D38820dfd117C3FA1f22a697dBA58d90BA06;
+
+    /// @dev Sepolia feed ETH/USD contract aress
+    address public ethUsdContractAdress = 0x694AA1769357215DE4FAC081bf1f309aDC325306; // Dec 8
 
     // ____________________ Constants ____________________
     /**
@@ -104,6 +71,9 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardU
      */
     event FeeUpdated(uint256 newFee);
 
+    // !!!!!!!!!!!!!!!!!! new event !!!!!!!!!!!
+    event UsdtTokenAddressChanged(address indexed newAddress);
+
     // ____________________ Custom Errors ____________________
     error IncorrectRegistrationFee(string message);
     error InvalidDomainFormat(string message);
@@ -117,62 +87,44 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardU
     error NoFundsForWithdrawal(string message);
     error TransferToParentFailed(string message);
     error TransferToOwnerFailed(string message);
+    error InvalidPriceData(string message);
 
-    // ____________________ Initializer ____________________
-    /// @notice Initializes the contract with the deployer as the owner and sets the initial registration fee
-    /// @dev Sets the initial owner to the deployer's address and the initial registration fee to 0.01 ether
+    // Initialazer
     function initialize() public initializer {
         DomainRegistryStorage storage ds = _domainRegistryStorage();
         ds.contractOwner = msg.sender;
-        ds.registrationFeeEth = 0.01 ether;
+
         __Ownable_init(msg.sender);
         __ReentrancyGuard_init();
+
+        setUsdtTokenAddress(usdtTokenAddress);
+
+        _dataFeed = AggregatorV3Interface(ethUsdContractAdress);
     }
 
-    // ========================== Functions ==========================
-    // ____________________ Core Business Logic Functions ____________________
-    /**
-     * @notice Registers a new domain if it is valid and unregistered.
-     * @dev Validates and registers a domain, charges a fee, and assigns ownership. Emits a DomainRegistered event.
-     * If the domain is a subdomain, a percentage of the fee is transferred to the parent domain's owner.
-     * @param domainName The domain name to be registered.
-     */
-    function registerDomain(string memory domainName) external payable nonReentrant {
+    // ========================== External Functions ==========================
+
+    // External function to register a domain with payment in ETH
+    function registerDomainWithETH(string memory domainName) external payable nonReentrant {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+        if (msg.value >= ds.registrationFeeEth) revert InvalidDomainFormat("Insufficient ETH sent");
+
+        _registerDomain(domainName, msg.value, "ETH");
+    }
+
+    function registerDomainWithUsdt(string memory domainName, uint256 usdtAmount) external payable nonReentrant {
         DomainRegistryStorage storage ds = _domainRegistryStorage();
 
-        // Check conditions (Checks)
-        string[] memory parts = _splitDomain(domainName);
-        uint256 domainLevel = parts.length;
-        address payable ownerAddress = payable(msg.sender);
-        address payable parentDomainOwner = payable(address(0));
+        uint256 requiredUsdtAmount = convertEthToUsdt(ds.registrationFeeEth);
 
-        if (!_isValidTopLevelDomain(domainName)) revert InvalidDomainFormat("Invalid domain format");
-        if (ds.domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
-        if (msg.value < ds.registrationFeeEth) revert IncorrectRegistrationFee("Incorrect registration fee");
-
-        // Update the contract state (Effects)
-        ds.domains[domainName] = ownerAddress;
-        ds.registeredDomainNames.push(domainName);
-        ds.totalDomainsRegisteredNumber++;
-
-        // Generate an event after all changes
-        emit DomainRegistered(domainName, ownerAddress);
-
-        //  Interactions
-        if (domainLevel == 1) {
-            // For a top-level domain, the entire payment is transferred to the contract owner
-            _handlePayments(ownerAddress, msg.value, 0); // 100% to contract owner
-        } else {
-            // For second-level domains and higher, determine the owner of the parent domain
-            string memory parentDomain = _parentDomainName(domainName);
-            parentDomainOwner = payable(ds.domains[parentDomain]);
-            if (parentDomainOwner == address(0)) revert InvalidDomainFormat("Parent domain not registered");
-
-            _handlePayments(parentDomainOwner, msg.value, _DOMAIN_OWNER_PERCENTAGE_BP); // 20% to domain owner
+        if (!ds.usdtToken.transferFrom(msg.sender, address(this), usdtAmount)) {
+            revert TransferFailed("Transfer failed");
         }
+        if (usdtAmount >= requiredUsdtAmount) revert InvalidDomainFormat("Insufficient USDT sent");
+
+        _registerDomain(domainName, requiredUsdtAmount, "USDT");
     }
 
-    // ____________________ Contract Management Functions ____________________
     /**
      * @dev Updates the domain registration fee to a new value.
      * This function can only be invoked by the owner of the contract.
@@ -197,7 +149,40 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardU
         emit FeeUpdated(newFee);
     }
 
-    // ____________________ View Functions ____________________
+    // ======================== Public Functions ========================
+
+    function renounceOwnership() public view override onlyOwner {
+        revert("Renouncing ownership is disabled");
+    }
+
+    function setUsdtTokenAddress(address newUsdtTokenAddress) public onlyOwner {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        if (newUsdtTokenAddress == address(0)) {
+            revert NewOwnerIsZeroAddress("Invalid address: cannot be 0 address");
+        }
+
+        usdtTokenAddress = newUsdtTokenAddress;
+        ds.usdtToken = ERC20Upgradeable(newUsdtTokenAddress);
+        emit UsdtTokenAddressChanged(newUsdtTokenAddress);
+    }
+
+    // ------------------------- Public Functions: View Functions -------------------------
+    function getChainlinkDataFeedLatestETHUSDT() public view returns (uint256) {
+        (
+            ,
+            /* uint80 roundID */ int256 answer /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/,
+            ,
+            ,
+
+        ) = _dataFeed.latestRoundData();
+
+        if (answer <= 0) {
+            revert InvalidPriceData("Invalid price data");
+        }
+
+        return uint256(answer);
+    }
 
     /**
      * @notice Retrieves the owner of a specific domain.
@@ -249,9 +234,12 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardU
         return ds.registrationFeeEth;
     }
 
-    // ============================ Internal Functions ==========================
+    function convertEthToUsdt(uint256 ethAmount) public view returns (uint256) {
+        uint256 ethPrice = getChainlinkDataFeedLatestETHUSDT(); // Get the latest price of ETH in USD
+        return (ethAmount * ethPrice) / 1e18; // Adjust for 18 decimal places in ETH
+    }
 
-    // ____________________ Internal Functions: Domain Handling ____________________
+    // ======================== Internal Functions ========================
     /**
      * @notice Validates a domain based on basic RFC 1035 rules using inline assembly for
      * character iteration and checks.
@@ -414,7 +402,8 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardU
         return result;
     }
 
-    // ____________________ Internal Functions: Utility ____________________
+    // ======================== Private Functions ========================
+
     /**
      * @dev Handles the payment distribution for domain registration.
      * Calculates and transfers the fee to the parent domain owner and the remaining amount to the contract owner.
@@ -423,7 +412,7 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardU
      * @param feePercentage The percentage of the total amount that should be
      * allocated as a fee to the parent domain owner.
      */
-    function _handlePayments(address payable recipient, uint256 amount, uint256 feePercentage) private {
+    function _handlePayments(address payable recipient, uint256 amount, uint256 feePercentage) private nonReentrant {
         DomainRegistryStorage storage ds = _domainRegistryStorage();
 
         uint256 feeAmount = (amount * feePercentage) / _BASIS_POINTS;
@@ -432,6 +421,78 @@ contract DomainRegistryV2 is Initializable, OwnableUpgradeable, ReentrancyGuardU
         recipient.transfer(feeAmount);
 
         payable(ds.contractOwner).transfer(ownerAmount);
+    }
+
+    // Handles the payment logistics based on domain level
+    function _processPayment(
+        string memory domainName, // Include domainName as a parameter
+        address payable ownerAddress,
+        uint256 paymentAmount,
+        string memory currency
+    ) private nonReentrant {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        uint256 domainLevel = _validateDomainRegistration(domainName);
+        address payable parentDomainOwner = payable(address(0));
+
+        // Interactions
+        if (keccak256(bytes(currency)) == keccak256(bytes("ETH"))) {
+            if (domainLevel == 1) {
+                // For a top-level domain, the entire payment is transferred to the contract owner
+                _handlePayments(ownerAddress, ds.registrationFeeEth, 0); // 100% ETH to contract owner
+            } else {
+                // For second-level domains and higher, determine the owner of the parent domain
+                string memory parentDomain = _parentDomainName(domainName);
+                parentDomainOwner = payable(ds.domains[parentDomain]);
+                if (parentDomainOwner == address(0)) revert InvalidDomainFormat("Parent domain not registered");
+
+                // 20% ETH to domain owner
+                _handlePayments(parentDomainOwner, ds.registrationFeeEth, _DOMAIN_OWNER_PERCENTAGE_BP);
+            }
+        } else if (keccak256(bytes(currency)) == keccak256(bytes("USDT"))) {
+            if (domainLevel == 1) {
+                _handlePayments(ownerAddress, paymentAmount, 0); // 100% USDT to contract owner
+            } else {
+                string memory parentDomain = _parentDomainName(domainName);
+                parentDomainOwner = payable(ds.domains[parentDomain]);
+                if (parentDomainOwner == address(0)) revert InvalidDomainFormat("Parent domain not registered");
+
+                // 20% USDT to domain owner
+                _handlePayments(parentDomainOwner, paymentAmount, _DOMAIN_OWNER_PERCENTAGE_BP);
+            }
+        }
+    }
+
+    // Main function to register a domain
+    function _registerDomain(
+        string memory domainName,
+        uint256 paymentAmount,
+        string memory currency
+    ) private nonReentrant {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+        address payable ownerAddress = payable(msg.sender);
+
+        ds.domains[domainName] = ownerAddress;
+        ds.registeredDomainNames.push(domainName);
+        ds.totalDomainsRegisteredNumber++;
+
+        emit DomainRegistered(domainName, ownerAddress);
+
+        // Call with one fewer parameter
+        _processPayment(domainName, ownerAddress, paymentAmount, currency);
+    }
+
+    // Validates the domain registration conditions
+    function _validateDomainRegistration(string memory domainName) private view returns (uint256) {
+        DomainRegistryStorage storage ds = _domainRegistryStorage();
+
+        string[] memory parts = _splitDomain(domainName);
+        uint256 domainLevel = parts.length;
+
+        if (!_isValidTopLevelDomain(domainName)) revert InvalidDomainFormat("Invalid domain format");
+        if (ds.domains[domainName] != address(0)) revert DomainAlreadyRegistered("Domain is already registered");
+
+        return domainLevel;
     }
 
     /**
