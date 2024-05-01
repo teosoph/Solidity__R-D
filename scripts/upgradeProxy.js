@@ -1,25 +1,25 @@
 const fs = require("fs");
 const path = require("path");
 
+const { ethers } = require("hardhat");
+const data = require("../SITE3/backend/data.json");
+
 async function main() {
-    const [deployer] = await ethers.getSigners();
-    console.log("Deploying contracts with the account:", deployer.address);
+    const deployer = data.deployerAddress;
+    console.log("Deploying contracts with the account:", deployer);
 
-    const DomainRegistry = await ethers.getContractFactory("DomainRegistryV2");
-
-    // const domainRegistry = await DomainRegistry.deploy();
+    const DomainRegistry = await ethers.getContractFactory("DomainRegistryV3");
 
     const domainRegistry = await upgrades.deployProxy(
         DomainRegistry,
         [], // Параметры конструктора, если они есть
         {
             initializer: "initialize", // Метод инициализации
-            from: deployer.address,
+            from: deployer,
         },
     );
 
     console.log("DomainRegistry deployed to:", domainRegistry.target);
-    console.log("DomainRegistry deployed to:", domainRegistry.address); // Используйте .address для получения адреса прокси
 
     // const tx = await domainRegistry.initialize();
     // await tx.wait();
@@ -29,11 +29,9 @@ async function main() {
     let configContent = fs.readFileSync(configPath, "utf8");
 
     // Replace the existing contract address with the new one
-    configContent = configContent.replace(/"deployedContractVersion"\s*:\s*"[^"]+"/, `"deployedContractVersion": "V2"`);
-    configContent = configContent.replace(
-        /"deployerAddress"\s*:\s*"[^"]+"/,
-        `"deployerAddress": "${deployer.address}"`,
-    );
+    configContent = configContent.replace(/"deployedContractVersion"\s*:\s*"[^"]+"/, `"deployedContractVersion": "V3"`);
+
+    configContent = configContent.replace(/"deployerAddress"\s*:\s*"[^"]+"/, `"deployerAddress": "${deployer}"`);
     configContent = configContent.replace(
         /"contractAddress"\s*:\s*"[^"]+"/,
         `"contractAddress": "${domainRegistry.target}"`,

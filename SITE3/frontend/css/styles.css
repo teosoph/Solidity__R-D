@@ -1,0 +1,40 @@
+body {
+    background-color: #f8f9fa;
+    color: #333;
+}
+
+.container {
+    padding-top: 20px;
+}
+
+h1 {
+    color: #bf0d0d;
+    margin-bottom: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    font-weight: bold;
+}
+
+input,
+select {
+    margin-top: 5px;
+}
+
+button {
+    width: 100%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-top: 10px;
+}
+
+span {
+    display: block;
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #e9ecef;
+    border: 1px solid #ced4da;
+}

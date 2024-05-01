@@ -1,0 +1,7 @@
+{
+  "jsonRpcUrl": "http://127.0.0.1:8545",
+  "deployedContractVersion": "V2",
+  "deployerAddress": "0xA62795cc821EDFd2D39D72e42e02714995131fD8",
+  "contractAddress": "0x94eCb8697CF612C615c158484e16108375Ba6BC9",
+  "mnemonic": "test test test test test test test test test test test junk"
+}
